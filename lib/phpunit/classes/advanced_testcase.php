@@ -32,7 +32,7 @@
  * @copyright  2012 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
+abstract class advanced_testcase extends base_testcase {
     /** @var bool automatically reset everything? null means log changes */
     private $resetAfterTest;
 
@@ -82,13 +82,20 @@ abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
             $DB = phpunit_util::get_global_backup('DB');
 
             // Deal with any debugging messages.
-            $debugerror = phpunit_util::display_debugging_messages();
+            $debugerror = phpunit_util::display_debugging_messages(true);
             $this->resetDebugging();
-            if ($debugerror) {
-                trigger_error('Unexpected debugging() call detected.', E_USER_NOTICE);
+            if (!empty($debugerror)) {
+                trigger_error('Unexpected debugging() call detected.'."\n".$debugerror, E_USER_NOTICE);
             }
 
-        } catch (Exception $e) {
+        } catch (Exception $ex) {
+            $e = $ex;
+        } catch (Throwable $ex) {
+            // Engine errors in PHP7 throw exceptions of type Throwable (this "catch" will be ignored in PHP5).
+            $e = $ex;
+        }
+
+        if (isset($e)) {
             // cleanup after failed expectation
             self::resetAllData();
             throw $e;
@@ -273,6 +280,9 @@ abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
      */
     public function assertDebuggingCalled($debugmessage = null, $debuglevel = null, $message = '') {
         $debugging = $this->getDebuggingMessages();
+        $debugdisplaymessage = "\n".phpunit_util::display_debugging_messages(true);
+        $this->resetDebugging();
+
         $count = count($debugging);
 
         if ($count == 0) {
@@ -283,12 +293,13 @@ abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
         }
         if ($count > 1) {
             if ($message === '') {
-                $message = 'Expectation failed, debugging() triggered '.$count.' times.';
+                $message = 'Expectation failed, debugging() triggered '.$count.' times.'.$debugdisplaymessage;
             }
             $this->fail($message);
         }
         $this->assertEquals(1, $count);
 
+        $message .= $debugdisplaymessage;
         $debug = reset($debugging);
         if ($debugmessage !== null) {
             $this->assertSame($debugmessage, $debug->message, $message);
@@ -296,8 +307,6 @@ abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
         if ($debuglevel !== null) {
             $this->assertSame($debuglevel, $debug->level, $message);
         }
-
-        $this->resetDebugging();
     }
 
     /**
@@ -311,6 +320,8 @@ abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
         if ($message === '') {
             $message = 'Expectation failed, debugging() was triggered.';
         }
+        $message .= "\n".phpunit_util::display_debugging_messages(true);
+        $this->resetDebugging();
         $this->assertEquals(0, $count, $message);
     }
 
@@ -598,6 +609,19 @@ abstract class advanced_testcase extends PHPUnit_Framework_TestCase {
             } else if ($exclude xor preg_match($fileregexp, $filepath)) {
                 $this->$callback($filepath);
             }
+        }
+    }
+
+    /**
+     * Wait for a second to roll over, ensures future calls to time() return a different result.
+     *
+     * This is implemented instead of sleep() as we do not need to wait a full second. In some cases
+     * due to calls we may wait more than sleep() would have, on average it will be less.
+     */
+    public function waitForSecond() {
+        $starttime = time();
+        while (time() == $starttime) {
+            usleep(50000);
         }
     }
 }

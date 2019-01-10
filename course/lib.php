@@ -1714,6 +1714,7 @@ function course_delete_module($cmid) {
     // very quick on an empty table).
     $DB->delete_records('course_modules_completion', array('coursemoduleid' => $cm->id));
     $DB->delete_records('course_completion_criteria', array('moduleinstance' => $cm->id,
+                                                            'course' => $cm->course,
                                                             'criteriatype' => COMPLETION_CRITERIA_TYPE_ACTIVITY));
 
     // Delete all tag instances associated with the instance of this module.
@@ -2486,6 +2487,8 @@ function save_local_role_names($courseid, $data) {
             $rolename->name = $value;
             $DB->insert_record('role_names', $rolename);
         }
+        // This will ensure the course contacts cache is purged..
+        coursecat::role_assignment_changed($roleid, $context);
     }
 }
 
@@ -2547,7 +2550,8 @@ function course_overviewfiles_options($course) {
  * @return object new course instance
  */
 function create_course($data, $editoroptions = NULL) {
-    global $DB;
+    global $DB, $CFG;
+    require_once($CFG->dirroot.'/tag/lib.php');
 
     //check the categoryid - must be given for all new courses
     $category = $DB->get_record('course_categories', array('id'=>$data->category), '*', MUST_EXIST);
@@ -2604,12 +2608,6 @@ function create_course($data, $editoroptions = NULL) {
 
     $course = course_get_format($newcourseid)->get_course();
 
-    // Setup the blocks
-    blocks_add_default_course_blocks($course);
-
-    // Create a default section.
-    course_create_sections_if_missing($course, 0);
-
     fix_course_sortorder();
     // purge appropriate caches in case fix_course_sortorder() did not change anything
     cache_helper::purge_by_event('changesincourse');
@@ -2617,20 +2615,31 @@ function create_course($data, $editoroptions = NULL) {
     // new context created - better mark it as dirty
     $context->mark_dirty();
 
+    // Trigger a course created event.
+    $event = \core\event\course_created::create(array(
+        'objectid' => $course->id,
+        'context' => context_course::instance($course->id),
+        'other' => array('shortname' => $course->shortname,
+            'fullname' => $course->fullname)
+    ));
+    $event->trigger();
+
+    // Setup the blocks
+    blocks_add_default_course_blocks($course);
+
+    // Create a default section.
+    course_create_sections_if_missing($course, 0);
+
     // Save any custom role names.
     save_local_role_names($course->id, (array)$data);
 
     // set up enrolments
     enrol_course_updated(true, $course, $data);
 
-    // Trigger a course created event.
-    $event = \core\event\course_created::create(array(
-        'objectid' => $course->id,
-        'context' => context_course::instance($course->id),
-        'other' => array('shortname' => $course->shortname,
-                         'fullname' => $course->fullname)
-    ));
-    $event->trigger();
+    // Update course tags.
+    if ($CFG->usetags && isset($data->tags)) {
+        tag_set('course', $course->id, $data->tags, 'core', context_course::instance($course->id)->id);
+    }
 
     return $course;
 }
@@ -2646,9 +2655,15 @@ function create_course($data, $editoroptions = NULL) {
  * @return void
  */
 function update_course($data, $editoroptions = NULL) {
-    global $DB;
+    global $DB, $CFG;
+    require_once($CFG->dirroot.'/tag/lib.php');
 
     $data->timemodified = time();
+
+    // Prevent changes on front page course.
+    if ($data->id == SITEID) {
+        throw new moodle_exception('invalidcourse', 'error');
+    }
 
     $oldcourse = course_get_format($data->id)->get_course();
     $context   = context_course::instance($oldcourse->id);
@@ -2732,6 +2747,11 @@ function update_course($data, $editoroptions = NULL) {
 
     // update enrol settings
     enrol_course_updated(false, $course, $data);
+
+    // Update course tags.
+    if ($CFG->usetags && isset($data->tags)) {
+        tag_set('course', $course->id, $data->tags, 'core', context_course::instance($course->id)->id);
+    }
 
     // Trigger a course updated event.
     $event = \core\event\course_updated::create(array(
@@ -3311,6 +3331,8 @@ function include_course_ajax($course, $usedmodules = array(), $enabledmodules = 
             'edittitleinstructions',
             'show',
             'hide',
+            'highlight',
+            'highlightoff',
             'groupsnone',
             'groupsvisible',
             'groupsseparate',
@@ -3581,6 +3603,12 @@ function duplicate_module($course, $cm) {
         $section = $DB->get_record('course_sections', array('id' => $cm->section, 'course' => $cm->course));
         moveto_module($newcm, $section, $cm);
         moveto_module($cm, $section, $newcm);
+
+        // Update calendar events with the duplicated module.
+        $refresheventsfunction = $newcm->modname . '_refresh_events';
+        if (function_exists($refresheventsfunction)) {
+            call_user_func($refresheventsfunction, $newcm->course);
+        }
 
         // Trigger course module created event. We can trigger the event only if we know the newcmid.
         $event = \core\event\course_module_created::create_from_cm($newcm);

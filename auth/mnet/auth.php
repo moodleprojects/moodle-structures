@@ -35,10 +35,17 @@ class auth_plugin_mnet extends auth_plugin_base {
     /**
      * Constructor.
      */
-    function auth_plugin_mnet() {
+    public function __construct() {
         $this->authtype = 'mnet';
         $this->config = get_config('auth_mnet');
         $this->mnet = get_mnet_environment();
+    }
+
+    /**
+     * Old syntax of class constructor for backward compatibility.
+     */
+    public function auth_plugin_mnet() {
+        self::__construct();
     }
 
     /**
@@ -253,7 +260,7 @@ class auth_plugin_mnet extends auth_plugin_base {
             exit;
         }
 
-        if (user_not_fully_set_up($remoteuser)) {
+        if (user_not_fully_set_up($remoteuser, false)) {
             print_error('notenoughidpinfo', 'mnet');
             exit;
         }

@@ -78,7 +78,8 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
                     $systemcontext)) {
             $url = new moodle_url('/user/editadvanced.php', array('id' => $user->id, 'course' => $courseid,
                 'returnto' => 'profile'));
-            $node = new core_user\output\myprofile\node('contact', 'editprofile', get_string('editmyprofile'), null, $url);
+            $node = new core_user\output\myprofile\node('contact', 'editprofile', get_string('editmyprofile'), null, $url,
+                null, null, 'editprofile');
             $tree->add_node($node);
         } else if ((has_capability('moodle/user:editprofile', $usercontext) && !is_siteadmin($user))
                    || ($iscurrentuser && has_capability('moodle/user:editownprofile', $systemcontext))) {
@@ -90,14 +91,14 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
                 $url = $userauthplugin->edit_profile_url();
                 if (empty($url)) {
                     if (empty($course)) {
-                        $url = new moodle_url('/user/edit.php', array('userid' => $user->id, 'returnto' => 'profile'));
+                        $url = new moodle_url('/user/edit.php', array('id' => $user->id, 'returnto' => 'profile'));
                     } else {
-                        $url = new moodle_url('/user/edit.php', array('userid' => $user->id, 'course' => $course->id,
+                        $url = new moodle_url('/user/edit.php', array('id' => $user->id, 'course' => $course->id,
                             'returnto' => 'profile'));
                     }
                 }
                 $node = new core_user\output\myprofile\node('contact', 'editprofile',
-                        get_string('editmyprofile'), null, $url);
+                        get_string('editmyprofile'), null, $url, null, null, 'editprofile');
                 $tree->add_node($node);
             }
         }
@@ -178,7 +179,7 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
     }
 
     if (isset($identityfields['phone1']) && $user->phone1) {
-        $node = new core_user\output\myprofile\node('contact', 'phone1', get_string('phone'), null, null, $user->phone1);
+        $node = new core_user\output\myprofile\node('contact', 'phone1', get_string('phone1'), null, null, $user->phone1);
         $tree->add_node($node);
     }
 
@@ -249,7 +250,7 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
                         $courselisting .= html_writer::tag('li', html_writer::link($url, $ccontext->get_context_name(false),
                                 $linkattributes));
                     } else {
-                        $courselisting .= html_writer::tag('li', $course->fullname);
+                        $courselisting .= html_writer::tag('li', $ccontext->get_context_name(false));
                     }
                 }
                 $shown++;
@@ -262,7 +263,7 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
                         $url = new moodle_url('/user/profile.php', array('id' => $user->id, 'showallcourses' => 1));
                     }
                     $courselisting .= html_writer::tag('li', html_writer::link($url, get_string('viewmore'),
-                            array('title' => get_string('viewmore'))));
+                            array('title' => get_string('viewmore'))), array('class' => 'viewmore'));
                     break;
                 }
             }
@@ -423,7 +424,7 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
     // Last ip.
     if (has_capability('moodle/user:viewlastip', $usercontext) && !isset($hiddenfields['lastip'])) {
         if ($user->lastip) {
-            $iplookupurl = new moodle_url('/iplookup/index.php', array('ip' => $user->lastip, 'user' => $USER->id));
+            $iplookupurl = new moodle_url('/iplookup/index.php', array('ip' => $user->lastip, 'user' => $user->id));
             $ipstring = html_writer::link($iplookupurl, $user->lastip);
         } else {
             $ipstring = get_string("none");

@@ -91,6 +91,7 @@ class renderer_base {
 
             $loader = new \core\output\mustache_filesystem_loader();
             $stringhelper = new \core\output\mustache_string_helper();
+            $quotehelper = new \core\output\mustache_quote_helper();
             $jshelper = new \core\output\mustache_javascript_helper($this->page->requires);
             $pixhelper = new \core\output\mustache_pix_helper($this);
 
@@ -99,6 +100,7 @@ class renderer_base {
 
             $helpers = array('config' => $safeconfig,
                              'str' => array($stringhelper, 'str'),
+                             'quote' => array($quotehelper, 'quote'),
                              'js' => array($jshelper, 'help'),
                              'pix' => array($pixhelper, 'pix'));
 
@@ -106,7 +108,8 @@ class renderer_base {
                 'cache' => $cachedir,
                 'escape' => 's',
                 'loader' => $loader,
-                'helpers' => $helpers));
+                'helpers' => $helpers,
+                'pragmas' => [Mustache_Engine::PRAGMA_BLOCKS]));
 
         }
 
@@ -556,7 +559,7 @@ class core_renderer extends renderer_base {
     public function standard_top_of_body_html() {
         global $CFG;
         $output = $this->page->requires->get_top_of_body_code();
-        if (!empty($CFG->additionalhtmltopofbody)) {
+        if ($this->page->pagelayout !== 'embedded' && !empty($CFG->additionalhtmltopofbody)) {
             $output .= "\n".$CFG->additionalhtmltopofbody;
         }
         $output .= $this->maintenance_warning();
@@ -679,7 +682,7 @@ class core_renderer extends renderer_base {
         // but some of the content won't be known until later, so we return a placeholder
         // for now. This will be replaced with the real content in {@link core_renderer::footer()}.
         $output = '';
-        if (!empty($CFG->additionalhtmlfooter)) {
+        if ($this->page->pagelayout !== 'embedded' && !empty($CFG->additionalhtmlfooter)) {
             $output .= "\n".$CFG->additionalhtmlfooter;
         }
         $output .= $this->unique_end_html_token;
@@ -1393,8 +1396,10 @@ class core_renderer extends renderer_base {
             $output = '';
             $skipdest = '';
         } else {
-            $output = html_writer::tag('a', get_string('skipa', 'access', $skiptitle), array('href' => '#sb-' . $bc->skipid, 'class' => 'skip-block'));
-            $skipdest = html_writer::tag('span', '', array('id' => 'sb-' . $bc->skipid, 'class' => 'skip-block-to'));
+            $output = html_writer::link('#sb-'.$bc->skipid, get_string('skipa', 'access', $skiptitle),
+                      array('class' => 'skip skip-block', 'id' => 'fsb-' . $bc->skipid));
+            $skipdest = html_writer::span('', 'skip-block-to',
+                      array('id' => 'sb-' . $bc->skipid));
         }
 
         $output .= html_writer::start_tag('div', $bc->attributes);
@@ -1826,13 +1831,21 @@ class core_renderer extends renderer_base {
      * @param string $selected selected element
      * @param array $nothing
      * @param string $formid
+     * @param array $attributes other attributes for the single select
      * @return string HTML fragment
      */
-    public function single_select($url, $name, array $options, $selected = '', $nothing = array('' => 'choosedots'), $formid = null) {
+    public function single_select($url, $name, array $options, $selected = '',
+                                $nothing = array('' => 'choosedots'), $formid = null, $attributes = array()) {
         if (!($url instanceof moodle_url)) {
             $url = new moodle_url($url);
         }
         $select = new single_select($url, $name, $options, $selected, $nothing, $formid);
+
+        if (array_key_exists('label', $attributes)) {
+            $select->set_label($attributes['label']);
+            unset($attributes['label']);
+        }
+        $select->attributes = $attributes;
 
         return $this->render($select);
     }
@@ -2679,7 +2692,7 @@ EOD;
      * @param string $debuginfo Debugging information
      * @return string the HTML to output.
      */
-    public function fatal_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null) {
+    public function fatal_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null, $errorcode = "") {
         global $CFG;
 
         $output = '';
@@ -2708,6 +2721,9 @@ EOD;
             $protocol = (isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0');
             if (empty($_SERVER['HTTP_RANGE'])) {
                 @header($protocol . ' 404 Not Found');
+            } else if (core_useragent::check_safari_ios_version(602) && !empty($_SERVER['HTTP_X_PLAYBACK_SESSION_ID'])) {
+                // Coax iOS 10 into sending the session cookie.
+                @header($protocol . ' 403 Forbidden');
             } else {
                 // Must stop byteserving attempts somehow,
                 // this is weird but Chrome PDF viewer can be stopped only with 407!
@@ -2951,7 +2967,7 @@ EOD;
      * @return string the HTML to output.
      */
     public function skip_link_target($id = null) {
-        return html_writer::tag('span', '', array('id' => $id));
+        return html_writer::span('', '', array('id' => $id));
     }
 
     /**
@@ -3174,7 +3190,7 @@ EOD;
         }
 
         // Get some navigation opts.
-        $opts = user_get_user_navigation_info($user, $this->page, $this->page->course);
+        $opts = user_get_user_navigation_info($user, $this->page);
 
         $avatarclasses = "avatars";
         $avatarcontents = html_writer::span($opts->metadata['useravatar'], 'avatar current');
@@ -4117,7 +4133,7 @@ class core_renderer_cli extends core_renderer {
      * @param string $debuginfo Debugging information
      * @return string A template fragment for a fatal error
      */
-    public function fatal_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null) {
+    public function fatal_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null, $errorcode = "") {
         global $CFG;
 
         $output = "!!! $message !!!\n";
@@ -4181,13 +4197,14 @@ class core_renderer_ajax extends core_renderer {
      * @param string $debuginfo Debugging information
      * @return string A template fragment for a fatal error
      */
-    public function fatal_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null) {
+    public function fatal_error($message, $moreinfourl, $link, $backtrace, $debuginfo = null, $errorcode = "") {
         global $CFG;
 
         $this->page->set_context(null); // ugly hack - make sure page context is set to something, we do not want bogus warnings here
 
         $e = new stdClass();
         $e->error      = $message;
+        $e->errorcode  = $errorcode;
         $e->stacktrace = NULL;
         $e->debuginfo  = NULL;
         $e->reproductionlink = NULL;

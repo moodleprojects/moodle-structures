@@ -61,12 +61,19 @@ class profile_field_base {
      * @param int $fieldid id of the profile from the user_info_field table
      * @param int $userid id of the user for whom we are displaying data
      */
-    public function profile_field_base($fieldid=0, $userid=0) {
+    public function __construct($fieldid=0, $userid=0) {
         global $USER;
 
         $this->set_fieldid($fieldid);
         $this->set_userid($userid);
         $this->load_data();
+    }
+
+    /**
+     * Old syntax of class constructor for backward compatibility.
+     */
+    public function profile_field_base($fieldid=0, $userid=0) {
+        self::__construct($fieldid, $userid);
     }
 
     /**
@@ -198,7 +205,7 @@ class profile_field_base {
      * @param  moodleform $mform instance of the moodleform class
      */
     public function edit_field_set_default($mform) {
-        if (!empty($default)) {
+        if (!empty($this->field->defaultdata)) {
             $mform->setDefault($this->inputname, $this->field->defaultdata);
         }
     }
@@ -652,3 +659,30 @@ function profile_view($user, $context, $course = null) {
     $event->trigger();
 }
 
+/**
+ * Does the user have all required custom fields set?
+ *
+ * Internal, to be exclusively used by {@link user_not_fully_set_up()} only.
+ *
+ * Note that if users have no way to fill a required field via editing their
+ * profiles (e.g. the field is not visible or it is locked), we still return true.
+ * So this is actually checking if we should redirect the user to edit their
+ * profile, rather than whether there is a value in the database.
+ *
+ * @param int $userid
+ * @return bool
+ */
+function profile_has_required_custom_fields_set($userid) {
+    global $DB;
+
+    $sql = "SELECT f.id
+              FROM {user_info_field} f
+         LEFT JOIN {user_info_data} d ON (d.fieldid = f.id AND d.userid = ?)
+             WHERE f.required = 1 AND f.visible > 0 AND f.locked = 0 AND d.id IS NULL";
+
+    if ($DB->record_exists_sql($sql, [$userid])) {
+        return false;
+    }
+
+    return true;
+}

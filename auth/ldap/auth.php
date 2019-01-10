@@ -143,11 +143,18 @@ class auth_plugin_ldap extends auth_plugin_base {
     /**
      * Constructor with initialisation.
      */
-    function auth_plugin_ldap() {
+    public function __construct() {
         $this->authtype = 'ldap';
         $this->roleauth = 'auth_ldap';
         $this->errorlogtag = '[AUTH LDAP] ';
         $this->init_plugin($this->authtype);
+    }
+
+    /**
+     * Old syntax of class constructor for backward compatibility.
+     */
+    public function auth_plugin_ldap() {
+        self::__construct();
     }
 
     /**
@@ -1773,7 +1780,7 @@ class auth_plugin_ldap extends auth_plugin_base {
             unset_cache_flag($this->pluginconfig.'/ntlmsess', $key);
 
             // Redirection
-            if (user_not_fully_set_up($USER)) {
+            if (user_not_fully_set_up($USER, true)) {
                 $urltogo = $CFG->wwwroot.'/user/edit.php';
                 // We don't delete $SESSION->wantsurl yet, so we get there later
             } else if (isset($SESSION->wantsurl) and (strpos($SESSION->wantsurl, $CFG->wwwroot) === 0)) {

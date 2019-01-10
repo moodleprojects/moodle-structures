@@ -37,6 +37,7 @@ class core_weblib_testcase extends advanced_testcase {
         $this->assertSame("ANother &amp; &amp;&amp;&amp;&amp;&amp; Category", format_string("ANother & &&&&& Category"));
         $this->assertSame("ANother &amp; &amp;&amp;&amp;&amp;&amp; Category", format_string("ANother & &&&&& Category", true));
         $this->assertSame("Nick's Test Site &amp; Other things", format_string("Nick's Test Site & Other things", true));
+        $this->assertSame("& < > \" '", format_string("& < > \" '", true, ['escape' => false]));
 
         // String entities.
         $this->assertSame("&quot;", format_string("&quot;"));
@@ -94,7 +95,7 @@ class core_weblib_testcase extends advanced_testcase {
             format_text_email('<p class="frogs">This is a <strong class=\'fishes\'>test</strong></p>', FORMAT_HTML));
         $this->assertSame('& so is this',
             format_text_email('&amp; so is this', FORMAT_HTML));
-        $this->assertSame('Two bullets: '.core_text::code2utf8(8226).' *',
+        $this->assertSame('Two bullets: ' . core_text::code2utf8(8226) . ' ' . core_text::code2utf8(8226),
             format_text_email('Two bullets: &#x2022; &#8226;', FORMAT_HTML));
         $this->assertSame(core_text::code2utf8(0x7fd2).core_text::code2utf8(0x7fd2),
             format_text_email('&#x7fd2;&#x7FD2;', FORMAT_HTML));
@@ -582,4 +583,19 @@ EXPECTED;
 
     }
 
+    /**
+     * Tests for validate_email() function.
+     */
+    public function test_validate_email() {
+
+        $this->assertEquals(1, validate_email('moodle@example.com'));
+        $this->assertEquals(1, validate_email('moodle@localhost.local'));
+        $this->assertEquals(1, validate_email('verp_email+is=mighty@moodle.org'));
+        $this->assertEquals(1, validate_email("but_potentially'dangerous'too@example.org"));
+        $this->assertEquals(1, validate_email('posts+AAAAAAAAAAIAAAAAAAAGQQAAAAABFSXz1eM/P/lR2bYyljM+@posts.moodle.org'));
+
+        $this->assertEquals(0, validate_email('moodle@localhost'));
+        $this->assertEquals(0, validate_email('"attacker\\" -oQ/tmp/ -X/var/www/vhost/moodle/backdoor.php  some"@email.com'));
+        $this->assertEquals(0, validate_email("moodle@example.com>\r\nRCPT TO:<victim@example.com"));
+    }
 }

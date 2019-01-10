@@ -76,7 +76,7 @@ function useredit_setup_preference_page($userid, $courseid) {
 
     // Remote users cannot be edited.
     if (is_mnet_remote_user($user)) {
-        if (user_not_fully_set_up($user)) {
+        if (user_not_fully_set_up($user, false)) {
             $hostwwwroot = $DB->get_field('mnet_host', 'wwwroot', array('id' => $user->mnethostid));
             print_error('usernotfullysetup', 'mnet', '', $hostwwwroot);
         }
@@ -264,6 +264,8 @@ function useredit_update_trackforums($user, $usernew) {
  * @param array $interests
  */
 function useredit_update_interests($user, $interests) {
+    global $CFG;
+    require_once($CFG->dirroot . '/tag/lib.php');
     tag_set('user', $user->id, $interests, 'core', context_user::instance($user->id)->id);
 }
 
@@ -437,7 +439,7 @@ function useredit_shared_definition(&$mform, $editoroptions, $filemanageroptions
     $mform->addElement('text', 'department', get_string('department'), 'maxlength="255" size="25"');
     $mform->setType('department', PARAM_TEXT);
 
-    $mform->addElement('text', 'phone1', get_string('phone'), 'maxlength="20" size="25"');
+    $mform->addElement('text', 'phone1', get_string('phone1'), 'maxlength="20" size="25"');
     $mform->setType('phone1', PARAM_NOTAGS);
 
     $mform->addElement('text', 'phone2', get_string('phone2'), 'maxlength="20" size="25"');

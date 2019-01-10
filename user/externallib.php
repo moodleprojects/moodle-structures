@@ -53,7 +53,10 @@ class core_user_external extends external_api {
                             'username' =>
                                 new external_value(PARAM_USERNAME, 'Username policy is defined in Moodle security config.'),
                             'password' =>
-                                new external_value(PARAM_RAW, 'Plain text password consisting of any characters'),
+                                new external_value(PARAM_RAW, 'Plain text password consisting of any characters', VALUE_OPTIONAL),
+                            'createpassword' =>
+                                new external_value(PARAM_BOOL, 'True if password should be created and mailed to user.',
+                                    VALUE_OPTIONAL),
                             'firstname' =>
                                 new external_value(PARAM_NOTAGS, 'The first name(s) of the user'),
                             'lastname' =>
@@ -149,6 +152,7 @@ class core_user_external extends external_api {
         $transaction = $DB->start_delegated_transaction();
 
         $userids = array();
+        $createpassword = false;
         foreach ($params['users'] as $user) {
             // Make sure that the username doesn't already exist.
             if ($DB->record_exists('user', array('username' => $user['username'], 'mnethostid' => $CFG->mnet_localhost_id))) {
@@ -173,6 +177,11 @@ class core_user_external extends external_api {
                 throw new invalid_parameter_exception('Invalid theme: '.$user['theme']);
             }
 
+            // Make sure we have a password or have to create one.
+            if (empty($user['password']) && empty($user['createpassword'])) {
+                throw new invalid_parameter_exception('Invalid password: you must provide a password, or set createpassword.');
+            }
+
             $user['confirmed'] = true;
             $user['mnethostid'] = $CFG->mnet_localhost_id;
 
@@ -186,8 +195,17 @@ class core_user_external extends external_api {
             }
             // End of user info validation.
 
+            $createpassword = !empty($user['createpassword']);
+            unset($user['createpassword']);
+            if ($createpassword) {
+                $user['password'] = '';
+                $updatepassword = false;
+            } else {
+                $updatepassword = true;
+            }
+
             // Create the user data now!
-            $user['id'] = user_create_user($user, true, false);
+            $user['id'] = user_create_user($user, $updatepassword, false);
 
             // Custom fields.
             if (!empty($user['customfields'])) {
@@ -199,13 +217,20 @@ class core_user_external extends external_api {
                 profile_save_data((object) $user);
             }
 
+            $userobject = (object)$user;
+            if ($createpassword) {
+                setnew_password_and_mail($userobject);
+                unset_user_preference('create_password', $userobject);
+                set_user_preference('auth_forcepasswordchange', 1, $userobject);
+            }
+
             // Trigger event.
             \core\event\user_created::create_from_userid($user['id'])->trigger();
 
             // Preferences.
             if (!empty($user['preferences'])) {
                 foreach ($user['preferences'] as $preference) {
-                    set_user_preference($preference['type'], $preference['value'], $user['id']);
+                    self::set_user_preference($preference['type'], $preference['value'], $userobject);
                 }
             }
 
@@ -434,7 +459,7 @@ class core_user_external extends external_api {
             // Preferences.
             if (!empty($user['preferences'])) {
                 foreach ($user['preferences'] as $preference) {
-                    set_user_preference($preference['type'], $preference['value'], $user['id']);
+                    self::set_user_preference($preference['type'], $preference['value'], $existinguser);
                 }
             }
         }
@@ -1271,7 +1296,7 @@ class core_user_external extends external_api {
     }
 
     /**
-     * Simulate the /user/index.php web interface page triggering events
+     * Trigger the user_list_viewed event.
      *
      * @param int $courseid id of course
      * @return array of warnings and status result
@@ -1347,7 +1372,7 @@ class core_user_external extends external_api {
     }
 
     /**
-     * Simulate the /user/index.php and /user/profile.php web interface page triggering events
+     * Trigger the user profile viewed event.
      *
      * @param int $userid id of user
      * @param int $courseid id of course
@@ -1377,14 +1402,7 @@ class core_user_external extends external_api {
 
         $course = get_course($params['courseid']);
         $user = core_user::get_user($params['userid'], '*', MUST_EXIST);
-
-        if ($user->deleted) {
-            throw new moodle_exception('userdeleted');
-        }
-        if (isguestuser($user)) {
-            // Can not view profile of guest - thre is nothing to see there.
-            throw new moodle_exception('invaliduserid');
-        }
+        core_user::require_active_user($user);
 
         if ($course->id == SITEID) {
             $coursecontext = context_system::instance();;
@@ -1435,6 +1453,35 @@ class core_user_external extends external_api {
         );
     }
 
+    /**
+     * Validates preference value and updates the user preference
+     *
+     * @param string $name
+     * @param string $value
+     * @param stdClass $user
+     */
+    protected static function set_user_preference($name, $value, $user) {
+        $preferences = array(
+            'auth_forcepasswordchange' => PARAM_BOOL,
+            'htmleditor' => PARAM_COMPONENT,
+            'usemodchooser' => PARAM_BOOL,
+            'badgeprivacysetting' => PARAM_BOOL,
+            'blogpagesize' => PARAM_INT,
+            'forum_markasreadonnotification' => PARAM_INT,
+            'calendar_timeformat' => PARAM_NOTAGS,
+            'calendar_startwday' => PARAM_INT,
+            'calendar_maxevents' => PARAM_INT,
+            'calendar_lookahead' => PARAM_INT,
+            'calendar_persistflt' => PARAM_INT
+        );
+        if (isset($preferences[$name])) {
+            $value = clean_param($value, $preferences[$name]);
+            if ($preferences[$name] == PARAM_BOOL) {
+                $value = (int)$value;
+            }
+            set_user_preference($name, $value, $user);
+        }
+    }
 }
 
  /**

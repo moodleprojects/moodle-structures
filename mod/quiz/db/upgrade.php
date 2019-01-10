@@ -904,7 +904,10 @@ function xmldb_quiz_upgrade($oldversion) {
     // Moodle v2.9.0 release upgrade line.
     // Put any upgrade step following this.
 
-    if ($oldversion < 2015051102) {
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2015111601) {
         // Update quiz_sections to repair quizzes what were broken by MDL-53507.
         $problemquizzes = $DB->get_records_sql("
                 SELECT quizid, MIN(firstslot) AS firstsectionfirstslot
@@ -926,7 +929,32 @@ function xmldb_quiz_upgrade($oldversion) {
         }
 
         // Quiz savepoint reached.
-        upgrade_mod_savepoint(true, 2015051102, 'quiz');
+        upgrade_mod_savepoint(true, 2015111601, 'quiz');
+    }
+
+    if ($oldversion < 2015111602) {
+        // Find quizzes with the combination of require passing grade and grade to pass 0.
+        $gradeitems = $DB->get_records_sql("
+            SELECT gi.id, gi.itemnumber, cm.id AS cmid
+              FROM {quiz} q
+        INNER JOIN {course_modules} cm ON q.id = cm.instance
+        INNER JOIN {grade_items} gi ON q.id = gi.iteminstance
+        INNER JOIN {modules} m ON m.id = cm.module
+             WHERE q.completionpass = 1
+               AND gi.gradepass = 0
+               AND cm.completiongradeitemnumber IS NULL
+               AND gi.itemmodule = m.name
+               AND gi.itemtype = ?
+               AND m.name = ?", array('mod', 'quiz'));
+
+        foreach ($gradeitems as $gradeitem) {
+            $DB->execute("UPDATE {course_modules}
+                             SET completiongradeitemnumber = :itemnumber
+                           WHERE id = :cmid",
+                array('itemnumber' => $gradeitem->itemnumber, 'cmid' => $gradeitem->cmid));
+        }
+        // Quiz savepoint reached.
+        upgrade_mod_savepoint(true, 2015111602, 'quiz');
     }
 
     return true;

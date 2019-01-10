@@ -65,7 +65,7 @@ $string['categorycurrent'] = 'Current category';
 $string['categorycurrentuse'] = 'Use this category';
 $string['categorydoesnotexist'] = 'This category does not exist';
 $string['categoryinfo'] = 'Category info';
-$string['categorymove'] = 'The category \'{$a->name}\' contains {$a->count} questions (some of them may be old, hidden, questions that are still in use in some existing quizzes). Please choose another category to move them to.';
+$string['categorymove'] = 'The category \'{$a->name}\' contains {$a->count} questions (some of which may be hidden questions or random questions that are still in use in a quiz). Please choose another category to move them to.';
 $string['categorymoveto'] = 'Save in category';
 $string['categorynamecantbeblank'] = 'The category name cannot be blank.';
 $string['clickflag'] = 'Flag question';
@@ -444,6 +444,3 @@ $string['withselected'] = 'With selected';
 $string['xoutofmax'] = '{$a->mark} out of {$a->max}';
 $string['yougotnright'] = 'You have correctly selected {$a->num}.';
 
-// Deprecated since Moodle 2.8.
-
-$string['hidden'] = 'Hidden';

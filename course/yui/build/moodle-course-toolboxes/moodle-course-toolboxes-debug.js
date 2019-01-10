@@ -1,5 +1,6 @@
 YUI.add('moodle-course-toolboxes', function (Y, NAME) {
 
+/* eslint-disable no-unused-vars */
 /**
  * Resource and activity toolbox class.
  *
@@ -201,6 +202,7 @@ Y.extend(TOOLBOX, Y.Base, {
     }
 }
 );
+/* global TOOLBOX, BODY, SELECTOR, INDENTLIMITS */
 
 /**
  * Resource and activity toolbox class.
@@ -347,7 +349,6 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
                 break;
             case 'move':
             case 'update':
-            case 'duplicate':
             case 'assignroles':
                 break;
             default:
@@ -932,6 +933,8 @@ M.course.init_resource_toolbox = function(config) {
     M.course.resource_toolbox = new RESOURCETOOLBOX(config);
     return M.course.resource_toolbox;
 };
+/* global SELECTOR, TOOLBOX */
+
 /**
  * Resource and activity toolbox class.
  *
@@ -983,6 +986,7 @@ Y.extend(SECTIONTOOLBOX, TOOLBOX, {
         var section = e.target.ancestor(M.course.format.get_section_selector(Y)),
             button = e.target.ancestor('a', true),
             hideicon = button.one('img'),
+            buttontext = button.one('span'),
 
         // The value to submit
             value,
@@ -1009,8 +1013,11 @@ Y.extend(SECTIONTOOLBOX, TOOLBOX, {
             'src'   : M.util.image_url('i/' + nextaction)
         });
         button.set('title', newstring);
+        if (buttontext) {
+            buttontext.set('text', newstring);
+        }
 
-        // Change the highlight status
+        // Change the show/hide status
         var data = {
             'class' : 'section',
             'field' : 'visible',
@@ -1055,6 +1062,7 @@ Y.extend(SECTIONTOOLBOX, TOOLBOX, {
         var section = e.target.ancestor(M.course.format.get_section_selector(Y));
         var button = e.target.ancestor('a', true);
         var buttonicon = button.one('img');
+        var buttontext = button.one('span');
 
         // Determine whether the marker is currently set.
         var togglestatus = section.hasClass('current');
@@ -1062,16 +1070,21 @@ Y.extend(SECTIONTOOLBOX, TOOLBOX, {
 
         // Set the current highlighted item text.
         var old_string = M.util.get_string('markthistopic', 'moodle');
-        Y.one(SELECTOR.PAGECONTENT)
+
+        var selectedpage = Y.one(SELECTOR.PAGECONTENT);
+        selectedpage
             .all(M.course.format.get_section_selector(Y) + '.current ' + SELECTOR.HIGHLIGHT)
             .set('title', old_string);
-        Y.one(SELECTOR.PAGECONTENT)
+        selectedpage
+            .all(M.course.format.get_section_selector(Y) + '.current ' + SELECTOR.HIGHLIGHT + ' span')
+            .set('text', M.util.get_string('highlight', 'moodle'));
+        selectedpage
             .all(M.course.format.get_section_selector(Y) + '.current ' + SELECTOR.HIGHLIGHT + ' img')
             .set('alt', old_string)
             .set('src', M.util.image_url('i/marker'));
 
         // Remove the highlighting from all sections.
-        Y.one(SELECTOR.PAGECONTENT).all(M.course.format.get_section_selector(Y))
+        selectedpage.all(M.course.format.get_section_selector(Y))
             .removeClass('current');
 
         // Then add it if required to the selected section.
@@ -1084,6 +1097,10 @@ Y.extend(SECTIONTOOLBOX, TOOLBOX, {
             buttonicon
                 .set('alt', new_string)
                 .set('src', M.util.image_url('i/marked'));
+            if (buttontext) {
+                buttontext
+                    .set('text', M.util.get_string('highlightoff', 'moodle'));
+            }
         }
 
         // Change the highlight status.

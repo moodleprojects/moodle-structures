@@ -623,9 +623,6 @@ function optional_param($parname, $default, $type) {
     if (func_num_args() != 3 or empty($parname) or empty($type)) {
         throw new coding_exception('optional_param requires $parname, $default + $type to be specified (parameter: '.$parname.')');
     }
-    if (!isset($default)) {
-        $default = null;
-    }
 
     // POST has precedence.
     if (isset($_POST[$parname])) {
@@ -1620,6 +1617,7 @@ function purge_all_caches() {
     cache_helper::purge_all();
 
     // Purge all other caches: rss, simplepie, etc.
+    clearstatcache();
     remove_dir($CFG->cachedir.'', true);
 
     // Make sure cache dir is writable, throws exception if not.
@@ -2618,8 +2616,17 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
         }
     }
 
-    // Check that the user account is properly set up.
-    if (user_not_fully_set_up($USER)) {
+    // Check that the user account is properly set up. If we can't redirect to
+    // edit their profile, perform just the lax check. It will allow them to
+    // use filepicker on the profile edit page.
+
+    if ($preventredirect) {
+        $usernotfullysetup = user_not_fully_set_up($USER, false);
+    } else {
+        $usernotfullysetup = user_not_fully_set_up($USER, true);
+    }
+
+    if ($usernotfullysetup) {
         if ($preventredirect) {
             throw new require_login_exception('User not fully set-up');
         }
@@ -2681,7 +2688,7 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
         if ($preventredirect) {
             throw new require_login_exception('Maintenance in progress');
         }
-
+        $PAGE->set_context(null);
         print_maintenance_message();
     }
 
@@ -2821,15 +2828,6 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
         }
     }
 
-    // Set the global $COURSE.
-    // TODO MDL-49434: setting current course/cm should be after the check $cm->uservisible .
-    if ($cm) {
-        $PAGE->set_cm($cm, $course);
-        $PAGE->set_pagelayout('incourse');
-    } else if (!empty($courseorid)) {
-        $PAGE->set_course($course);
-    }
-
     // Check visibility of activity to current user; includes visible flag, conditional availability, etc.
     if ($cm && !$cm->uservisible) {
         if ($preventredirect) {
@@ -2841,6 +2839,14 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
             $url = new moodle_url('/');
         }
         redirect($url, get_string('activityiscurrentlyhidden'));
+    }
+
+    // Set the global $COURSE.
+    if ($cm) {
+        $PAGE->set_cm($cm, $course);
+        $PAGE->set_pagelayout('incourse');
+    } else if (!empty($courseorid)) {
+        $PAGE->set_course($course);
     }
 
     // Finally access granted, update lastaccess times.
@@ -3135,14 +3141,39 @@ function update_user_login_times() {
 /**
  * Determines if a user has completed setting up their account.
  *
+ * The lax mode (with $strict = false) has been introduced for special cases
+ * only where we want to skip certain checks intentionally. This is valid in
+ * certain mnet or ajax scenarios when the user cannot / should not be
+ * redirected to edit their profile. In most cases, you should perform the
+ * strict check.
+ *
  * @param stdClass $user A {@link $USER} object to test for the existence of a valid name and email
+ * @param bool $strict Be more strict and assert id and custom profile fields set, too
  * @return bool
  */
-function user_not_fully_set_up($user) {
+function user_not_fully_set_up($user, $strict = true) {
+    global $CFG;
+    require_once($CFG->dirroot.'/user/profile/lib.php');
+
     if (isguestuser($user)) {
         return false;
     }
-    return (empty($user->firstname) or empty($user->lastname) or empty($user->email) or over_bounce_threshold($user));
+
+    if (empty($user->firstname) or empty($user->lastname) or empty($user->email) or over_bounce_threshold($user)) {
+        return true;
+    }
+
+    if ($strict) {
+        if (empty($user->id)) {
+            // Strict mode can be used with existing accounts only.
+            return true;
+        }
+        if (!profile_has_required_custom_fields_set($user->id)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -3551,9 +3582,6 @@ function get_extra_user_fields_sql($context, $alias='', $prefix='', $already = a
 function get_user_field_name($field) {
     // Some fields have language strings which are not the same as field name.
     switch ($field) {
-        case 'phone1' : {
-            return get_string('phone');
-        }
         case 'url' : {
             return get_string('webpage');
         }
@@ -4291,7 +4319,7 @@ function authenticate_user_login($username, $password, $ignorelockout=false, &$f
  * @return stdClass A {@link $USER} object - BC only, do not use
  */
 function complete_user_login($user) {
-    global $CFG, $USER;
+    global $CFG, $USER, $SESSION;
 
     \core\session\manager::login_user($user);
 
@@ -4334,6 +4362,7 @@ function complete_user_login($user) {
             if ($changeurl = $userauth->change_password_url()) {
                 redirect($changeurl);
             } else {
+                $SESSION->wantsurl = core_login_get_return_url();
                 redirect($CFG->httpswwwroot.'/login/change_password.php');
             }
         } else {
@@ -4747,7 +4776,7 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     require_once($CFG->libdir.'/questionlib.php');
     require_once($CFG->libdir.'/gradelib.php');
     require_once($CFG->dirroot.'/group/lib.php');
-    require_once($CFG->dirroot.'/tag/coursetagslib.php');
+    require_once($CFG->dirroot.'/tag/lib.php');
     require_once($CFG->dirroot.'/comment/lib.php');
     require_once($CFG->dirroot.'/rating/lib.php');
     require_once($CFG->dirroot.'/notes/lib.php');
@@ -4865,10 +4894,12 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
 
     // Cleanup the rest of plugins.
     $cleanuplugintypes = array('report', 'coursereport', 'format');
+    $callbacks = get_plugins_with_function('delete_course', 'lib.php');
     foreach ($cleanuplugintypes as $type) {
-        $plugins = get_plugin_list_with_function($type, 'delete_course', 'lib.php');
-        foreach ($plugins as $plugin => $pluginfunction) {
-            $pluginfunction($course->id, $showfeedback);
+        if (!empty($callbacks[$type])) {
+            foreach ($callbacks[$type] as $pluginfunction) {
+                $pluginfunction($course->id, $showfeedback);
+            }
         }
         if ($showfeedback) {
             echo $OUTPUT->notification($strdeleted.get_string('type_'.$type.'_plural', 'plugin'), 'notifysuccess');
@@ -4920,7 +4951,7 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     $rm->delete_ratings($delopt);
 
     // Delete course tags.
-    coursetag_delete_course_tags($course->id, $showfeedback);
+    tag_set('course', $course->id, array(), 'core', $coursecontext->id);
 
     // Delete calendar events.
     $DB->delete_records('event', array('courseid' => $course->id));
@@ -5548,6 +5579,18 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
     $tempreplyto = array();
 
     $supportuser = core_user::get_support_user();
+    $noreplyaddressdefault = 'noreply@' . get_host_from_url($CFG->wwwroot);
+    $noreplyaddress = empty($CFG->noreplyaddress) ? $noreplyaddressdefault : $CFG->noreplyaddress;
+
+    if (!validate_email($noreplyaddress)) {
+        debugging('email_to_user: Invalid noreply-email '.s($noreplyaddress));
+        $noreplyaddress = $noreplyaddressdefault;
+    }
+
+    if (!validate_email($supportuser->email)) {
+        debugging('email_to_user: Invalid support-email '.s($supportuser->email));
+        $supportuser->email = $noreplyaddress;
+    }
 
     // Make up an email address for handling bounces.
     if (!empty($CFG->handlebounces)) {
@@ -5565,17 +5608,28 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
         }
     }
 
+    // Make sure that the explicit replyto is valid, fall back to the implicit one.
+    if (!empty($replyto) && !validate_email($replyto)) {
+        debugging('email_to_user: Invalid replyto-email '.s($replyto));
+        $replyto = $noreplyaddress;
+    }
+
     if (is_string($from)) { // So we can pass whatever we want if there is need.
-        $mail->From     = $CFG->noreplyaddress;
+        $mail->From     = $noreplyaddress;
         $mail->FromName = $from;
     } else if ($usetrueaddress and $from->maildisplay) {
+        if (!validate_email($from->email)) {
+            debugging('email_to_user: Invalid from-email '.s($from->email).' - not sending');
+            // Better not to use $noreplyaddress in this case.
+            return false;
+        }
         $mail->From     = $from->email;
         $mail->FromName = fullname($from);
     } else {
-        $mail->From     = $CFG->noreplyaddress;
+        $mail->From     = $noreplyaddress;
         $mail->FromName = fullname($from);
         if (empty($replyto)) {
-            $tempreplyto[] = array($CFG->noreplyaddress, get_string('noreplyname'));
+            $tempreplyto[] = array($noreplyaddress, get_string('noreplyname'));
         }
     }
 
@@ -6107,9 +6161,10 @@ function valid_uploaded_file($newfile) {
  * @param int $sitebytes Set maximum size
  * @param int $coursebytes Current course $course->maxbytes (in bytes)
  * @param int $modulebytes Current module ->maxbytes (in bytes)
+ * @param bool $unused This parameter has been deprecated and is not used any more.
  * @return int The maximum size for uploading files.
  */
-function get_max_upload_file_size($sitebytes=0, $coursebytes=0, $modulebytes=0) {
+function get_max_upload_file_size($sitebytes=0, $coursebytes=0, $modulebytes=0, $unused = false) {
 
     if (! $filesize = ini_get('upload_max_filesize')) {
         $filesize = '5M';
@@ -6148,9 +6203,11 @@ function get_max_upload_file_size($sitebytes=0, $coursebytes=0, $modulebytes=0) 
  * @param int $coursebytes Current course $course->maxbytes (in bytes)
  * @param int $modulebytes Current module ->maxbytes (in bytes)
  * @param stdClass $user The user
+ * @param bool $unused This parameter has been deprecated and is not used any more.
  * @return int The maximum size for uploading files.
  */
-function get_user_max_upload_file_size($context, $sitebytes = 0, $coursebytes = 0, $modulebytes = 0, $user = null) {
+function get_user_max_upload_file_size($context, $sitebytes = 0, $coursebytes = 0, $modulebytes = 0, $user = null,
+        $unused = false) {
     global $USER;
 
     if (empty($user)) {
@@ -6158,7 +6215,7 @@ function get_user_max_upload_file_size($context, $sitebytes = 0, $coursebytes = 
     }
 
     if (has_capability('moodle/course:ignorefilesizelimits', $context, $user)) {
-        return get_max_upload_file_size(USER_CAN_IGNORE_FILE_SIZE_LIMITS);
+        return USER_CAN_IGNORE_FILE_SIZE_LIMITS;
     }
 
     return get_max_upload_file_size($sitebytes, $coursebytes, $modulebytes);
@@ -7049,24 +7106,120 @@ function is_valid_plugin_name($name) {
  *      and the function names as values (e.g. 'report_courselist_hook', 'forum_hook').
  */
 function get_plugin_list_with_function($plugintype, $function, $file = 'lib.php') {
+    global $CFG;
+
+    // We don't include here as all plugin types files would be included.
+    $plugins = get_plugins_with_function($function, $file, false);
+
+    if (empty($plugins[$plugintype])) {
+        return array();
+    }
+
+    $allplugins = core_component::get_plugin_list($plugintype);
+
+    // Reformat the array and include the files.
     $pluginfunctions = array();
-    $pluginswithfile = core_component::get_plugin_list_with_file($plugintype, $file, true);
-    foreach ($pluginswithfile as $plugin => $notused) {
-        $fullfunction = $plugintype . '_' . $plugin . '_' . $function;
+    foreach ($plugins[$plugintype] as $pluginname => $functionname) {
 
-        if (function_exists($fullfunction)) {
-            // Function exists with standard name. Store, indexed by frankenstyle name of plugin.
-            $pluginfunctions[$plugintype . '_' . $plugin] = $fullfunction;
+        // Check that it has not been removed and the file is still available.
+        if (!empty($allplugins[$pluginname])) {
 
-        } else if ($plugintype === 'mod') {
-            // For modules, we also allow plugin without full frankenstyle but just starting with the module name.
-            $shortfunction = $plugin . '_' . $function;
-            if (function_exists($shortfunction)) {
-                $pluginfunctions[$plugintype . '_' . $plugin] = $shortfunction;
+            $filepath = $allplugins[$pluginname] . DIRECTORY_SEPARATOR . $file;
+            if (file_exists($filepath)) {
+                include_once($filepath);
+                $pluginfunctions[$plugintype . '_' . $pluginname] = $functionname;
             }
         }
     }
+
     return $pluginfunctions;
+}
+
+/**
+ * Get a list of all the plugins that define a certain API function in a certain file.
+ *
+ * @param string $function the part of the name of the function after the
+ *      frankenstyle prefix. e.g 'hook' if you are looking for functions with
+ *      names like report_courselist_hook.
+ * @param string $file the name of file within the plugin that defines the
+ *      function. Defaults to lib.php.
+ * @param bool $include Whether to include the files that contain the functions or not.
+ * @return array with [plugintype][plugin] = functionname
+ */
+function get_plugins_with_function($function, $file = 'lib.php', $include = true) {
+    global $CFG;
+
+    $cache = \cache::make('core', 'plugin_functions');
+
+    // Including both although I doubt that we will find two functions definitions with the same name.
+    // Clearning the filename as cache_helper::hash_key only allows a-zA-Z0-9_.
+    $key = $function . '_' . clean_param($file, PARAM_ALPHA);
+
+    if ($pluginfunctions = $cache->get($key)) {
+
+        // Checking that the files are still available.
+        foreach ($pluginfunctions as $plugintype => $plugins) {
+
+            $allplugins = \core_component::get_plugin_list($plugintype);
+            foreach ($plugins as $plugin => $fullpath) {
+
+                // Cache might be out of sync with the codebase, skip the plugin if it is not available.
+                if (empty($allplugins[$plugin])) {
+                    unset($pluginfunctions[$plugintype][$plugin]);
+                    continue;
+                }
+
+                $fileexists = file_exists($allplugins[$plugin] . DIRECTORY_SEPARATOR . $file);
+                if ($include && $fileexists) {
+                    // Include the files if it was requested.
+                    include_once($allplugins[$plugin] . DIRECTORY_SEPARATOR . $file);
+                } else if (!$fileexists) {
+                    // If the file is not available any more it should not be returned.
+                    unset($pluginfunctions[$plugintype][$plugin]);
+                }
+            }
+        }
+        return $pluginfunctions;
+    }
+
+    $pluginfunctions = array();
+
+    // To fill the cached. Also, everything should continue working with cache disabled.
+    $plugintypes = \core_component::get_plugin_types();
+    foreach ($plugintypes as $plugintype => $unused) {
+
+        // We need to include files here.
+        $pluginswithfile = \core_component::get_plugin_list_with_file($plugintype, $file, true);
+        foreach ($pluginswithfile as $plugin => $notused) {
+
+            $fullfunction = $plugintype . '_' . $plugin . '_' . $function;
+
+            $pluginfunction = false;
+            if (function_exists($fullfunction)) {
+                // Function exists with standard name. Store, indexed by frankenstyle name of plugin.
+                $pluginfunction = $fullfunction;
+
+            } else if ($plugintype === 'mod') {
+                // For modules, we also allow plugin without full frankenstyle but just starting with the module name.
+                $shortfunction = $plugin . '_' . $function;
+                if (function_exists($shortfunction)) {
+                    $pluginfunction = $shortfunction;
+                }
+            }
+
+            if ($pluginfunction) {
+                if (empty($pluginfunctions[$plugintype])) {
+                    $pluginfunctions[$plugintype] = array();
+                }
+                $pluginfunctions[$plugintype][$plugin] = $pluginfunction;
+            }
+
+        }
+    }
+    $cache->set($key, $pluginfunctions);
+
+    return $pluginfunctions;
+
 }
 
 /**
@@ -7547,12 +7700,12 @@ function random_bytes_emulate($length) {
     }
 
     // Bad luck, there is no reliable random generator, let's just hash some unique stuff that is hard to guess.
-    $hash = sha1(serialize($CFG) . serialize($_SERVER) . microtime(true) . uniqid('', true), true);
-    // NOTE: the last param in sha1() is true, this means we are getting 20 bytes, not 40 chars as usual.
-    if ($length <= 20) {
-        return substr($hash, 0, $length);
-    }
-    return $hash . random_bytes_emulate($length - 20);
+    $staticdata = serialize($CFG) . serialize($_SERVER);
+    $hash = '';
+    do {
+        $hash .= sha1($staticdata . microtime(true) . uniqid('', true), true);
+    } while (strlen($hash) < $length);
+    return substr($hash, 0, $length);
 }
 
 /**
@@ -9357,6 +9510,58 @@ function get_course_display_name_for_list($course) {
     } else {
         return $course->fullname;
     }
+}
+
+/**
+ * Safe analogue of unserialize() that can only parse arrays
+ *
+ * Arrays may contain only integers or strings as both keys and values. Nested arrays are allowed.
+ * Note: If any string (key or value) has semicolon (;) as part of the string parsing will fail.
+ * This is a simple method to substitute unnecessary unserialize() in code and not intended to cover all possible cases.
+ *
+ * @param string $expression
+ * @return array|bool either parsed array or false if parsing was impossible.
+ */
+function unserialize_array($expression) {
+    $subs = [];
+    // Find nested arrays, parse them and store in $subs , substitute with special string.
+    while (preg_match('/([\^;\}])(a:\d+:\{[^\{\}]*\})/', $expression, $matches) && strlen($matches[2]) < strlen($expression)) {
+        $key = '--SUB' . count($subs) . '--';
+        $subs[$key] = unserialize_array($matches[2]);
+        if ($subs[$key] === false) {
+            return false;
+        }
+        $expression = str_replace($matches[2], $key . ';', $expression);
+    }
+
+    // Check the expression is an array.
+    if (!preg_match('/^a:(\d+):\{([^\}]*)\}$/', $expression, $matches1)) {
+        return false;
+    }
+    // Get the size and elements of an array (key;value;key;value;....).
+    $parts = explode(';', $matches1[2]);
+    $size = intval($matches1[1]);
+    if (count($parts) < $size * 2 + 1) {
+        return false;
+    }
+    // Analyze each part and make sure it is an integer or string or a substitute.
+    $value = [];
+    for ($i = 0; $i < $size * 2; $i++) {
+        if (preg_match('/^i:(\d+)$/', $parts[$i], $matches2)) {
+            $parts[$i] = (int)$matches2[1];
+        } else if (preg_match('/^s:(\d+):"(.*)"$/', $parts[$i], $matches3) && strlen($matches3[2]) == (int)$matches3[1]) {
+            $parts[$i] = $matches3[2];
+        } else if (preg_match('/^--SUB\d+--$/', $parts[$i])) {
+            $parts[$i] = $subs[$parts[$i]];
+        } else {
+            return false;
+        }
+    }
+    // Combine keys and values.
+    for ($i = 0; $i < $size * 2; $i += 2) {
+        $value[$parts[$i]] = $parts[$i+1];
+    }
+    return $value;
 }
 
 /**

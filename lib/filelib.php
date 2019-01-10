@@ -2160,7 +2160,6 @@ function send_file($path, $filename, $lifetime = null , $filter=0, $pathisstring
             $options->nocache = true; // temporary workaround for MDL-5136
             $text = $pathisstring ? $path : implode('', file($path));
 
-            $text = file_modify_html_header($text);
             $output = format_text($text, FORMAT_HTML, $options, $COURSE->id);
 
             readstring_accel($output, $mimetype, false);
@@ -2344,7 +2343,6 @@ function send_stored_file($stored_file, $lifetime=null, $filter=0, $forcedownloa
             $options->noclean = true;
             $options->nocache = true; // temporary workaround for MDL-5136
             $text = $stored_file->get_content();
-            $text = file_modify_html_header($text);
             $output = format_text($text, FORMAT_HTML, $options, $COURSE->id);
 
             readstring_accel($output, $mimetype, false);
@@ -2606,57 +2604,6 @@ function byteserving_send_file($handle, $mimetype, $ranges, $filesize) {
         fclose($handle);
         die;
     }
-}
-
-/**
- * add includes (js and css) into uploaded files
- * before returning them, useful for themes and utf.js includes
- *
- * @global stdClass $CFG
- * @param string $text text to search and replace
- * @return string text with added head includes
- * @todo MDL-21120
- */
-function file_modify_html_header($text) {
-    // first look for <head> tag
-    global $CFG;
-
-    $stylesheetshtml = '';
-/*
-    foreach ($CFG->stylesheets as $stylesheet) {
-        //TODO: MDL-21120
-        $stylesheetshtml .= '<link rel="stylesheet" type="text/css" href="'.$stylesheet.'" />'."\n";
-    }
-*/
-    // TODO The code below is actually a waste of CPU. When MDL-29738 will be implemented it should be re-evaluated too.
-
-    preg_match('/\<head\>|\<HEAD\>/', $text, $matches);
-    if ($matches) {
-        $replacement = '<head>'.$stylesheetshtml;
-        $text = preg_replace('/\<head\>|\<HEAD\>/', $replacement, $text, 1);
-        return $text;
-    }
-
-    // if not, look for <html> tag, and stick <head> right after
-    preg_match('/\<html\>|\<HTML\>/', $text, $matches);
-    if ($matches) {
-        // replace <html> tag with <html><head>includes</head>
-        $replacement = '<html>'."\n".'<head>'.$stylesheetshtml.'</head>';
-        $text = preg_replace('/\<html\>|\<HTML\>/', $replacement, $text, 1);
-        return $text;
-    }
-
-    // if not, look for <body> tag, and stick <head> before body
-    preg_match('/\<body\>|\<BODY\>/', $text, $matches);
-    if ($matches) {
-        $replacement = '<head>'.$stylesheetshtml.'</head>'."\n".'<body>';
-        $text = preg_replace('/\<body\>|\<BODY\>/', $replacement, $text, 1);
-        return $text;
-    }
-
-    // if not, just stick a <head> tag at the beginning
-    $text = '<head>'.$stylesheetshtml.'</head>'."\n".$text;
-    return $text;
 }
 
 /**
@@ -4188,6 +4135,14 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
                 require_login();
             }
 
+            // Check if user can view this category.
+            if (!has_capability('moodle/category:viewhiddencategories', $context)) {
+                $coursecatvisible = $DB->get_field('course_categories', 'visible', array('id' => $context->instanceid));
+                if (!$coursecatvisible) {
+                    send_file_not_found();
+                }
+            }
+
             $filename = array_pop($args);
             $filepath = $args ? '/'.implode('/', $args).'/' : '/';
             if (!$file = $fs->get_file($context->id, 'coursecat', 'description', 0, $filepath, $filename) or $file->is_directory()) {
@@ -4245,6 +4200,35 @@ function file_pluginfile($relativepath, $forcedownload, $preview = null) {
         } else {
             send_file_not_found();
         }
+
+    } else if ($component === 'cohort') {
+
+        $cohortid = (int)array_shift($args);
+        $cohort = $DB->get_record('cohort', array('id' => $cohortid), '*', MUST_EXIST);
+        $cohortcontext = context::instance_by_id($cohort->contextid);
+
+        // The context in the file URL must be either cohort context or context of the course underneath the cohort's context.
+        if ($context->id != $cohort->contextid &&
+            ($context->contextlevel != CONTEXT_COURSE || !in_array($cohort->contextid, $context->get_parent_context_ids()))) {
+            send_file_not_found();
+        }
+
+        // User is able to access cohort if they have view cap on cohort level or
+        // the cohort is visible and they have view cap on course level.
+        $canview = has_capability('moodle/cohort:view', $cohortcontext) ||
+                ($cohort->visible && has_capability('moodle/cohort:view', $context));
+
+        if ($filearea === 'description' && $canview) {
+            $filename = array_pop($args);
+            $filepath = $args ? '/'.implode('/', $args).'/' : '/';
+            if (($file = $fs->get_file($cohortcontext->id, 'cohort', 'description', $cohort->id, $filepath, $filename))
+                    && !$file->is_directory()) {
+                \core\session\manager::write_close(); // Unlock session during file serving.
+                send_stored_file($file, 60 * 60, 0, $forcedownload, array('preview' => $preview));
+            }
+        }
+
+        send_file_not_found();
 
     } else if ($component === 'group') {
         if ($context->contextlevel != CONTEXT_COURSE) {

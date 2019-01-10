@@ -77,13 +77,14 @@ class MoodleQuickForm_date_time_selector extends MoodleQuickForm_group {
      * @param array $options Options to control the element's display
      * @param mixed $attributes Either a typical HTML attribute string or an associative array
      */
-    function MoodleQuickForm_date_time_selector($elementName = null, $elementLabel = null, $options = array(), $attributes = null) {
+    public function __construct($elementName = null, $elementLabel = null, $options = array(), $attributes = null) {
         // Get the calendar type used - see MDL-18375.
         $calendartype = \core_calendar\type_factory::get_calendar_instance();
         $this->_options = array('startyear' => $calendartype->get_min_year(), 'stopyear' => $calendartype->get_max_year(),
             'defaulttime' => 0, 'timezone' => 99, 'step' => 5, 'optional' => false);
 
-        $this->HTML_QuickForm_element($elementName, $elementLabel, $attributes);
+        // TODO MDL-52313 Replace with the call to parent::__construct().
+        HTML_QuickForm_element::__construct($elementName, $elementLabel, $attributes);
         $this->_persistantFreeze = true;
         $this->_appendName = true;
         $this->_type = 'date_time_selector';
@@ -104,6 +105,13 @@ class MoodleQuickForm_date_time_selector extends MoodleQuickForm_group {
         if ($calendartype->get_name() === 'gregorian') {
             form_init_date_js();
         }
+    }
+
+    /**
+     * Old syntax of class constructor for backward compatibility.
+     */
+    public function MoodleQuickForm_date_time_selector($elementName = null, $elementLabel = null, $options = array(), $attributes = null) {
+        self::__construct($elementName, $elementLabel, $options, $attributes);
     }
 
     /**
@@ -274,7 +282,6 @@ class MoodleQuickForm_date_time_selector extends MoodleQuickForm_group {
      * @return array
      */
     function exportValue(&$submitValues, $assoc = false) {
-        $value = null;
         $valuearray = array();
         foreach ($this->_elements as $element){
             $thisexport = $element->exportValue($submitValues[$this->getName()], true);
@@ -286,8 +293,7 @@ class MoodleQuickForm_date_time_selector extends MoodleQuickForm_group {
             if($this->_options['optional']) {
                 // If checkbox is on, the value is zero, so go no further
                 if(empty($valuearray['enabled'])) {
-                    $value[$this->getName()] = 0;
-                    return $value;
+                    return $this->_prepareValue(0, $assoc);
                 }
             }
             // Get the calendar type used - see MDL-18375.
@@ -297,7 +303,7 @@ class MoodleQuickForm_date_time_selector extends MoodleQuickForm_group {
                                                                  $valuearray['day'],
                                                                  $valuearray['hour'],
                                                                  $valuearray['minute']);
-            $value[$this->getName()] = make_timestamp($gregoriandate['year'],
+            $value = make_timestamp($gregoriandate['year'],
                                                       $gregoriandate['month'],
                                                       $gregoriandate['day'],
                                                       $gregoriandate['hour'],
@@ -306,7 +312,7 @@ class MoodleQuickForm_date_time_selector extends MoodleQuickForm_group {
                                                       $this->_options['timezone'],
                                                       true);
 
-            return $value;
+            return $this->_prepareValue($value, $assoc);
         } else {
             return null;
         }
