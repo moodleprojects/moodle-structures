@@ -355,8 +355,7 @@ class redis extends handler {
         }
 
         try {
-            $sessionexists = $this->connection->exists($sid);
-            return !empty($sessionexists);
+            return $this->connection->exists($sid);
         } catch (RedisException $e) {
             return false;
         }

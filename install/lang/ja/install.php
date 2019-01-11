@@ -46,7 +46,7 @@ $string['dbprefix'] = 'テーブル接頭辞';
 $string['dirroot'] = 'Moodleディレクトリ';
 $string['environmenthead'] = 'あなたの環境を確認しています ...';
 $string['environmentsub2'] = 'それぞれのMoodleリリースにはPHPバージョンの最小必要条件および多くの必須PHP拡張モジュールがあります。完全な環境チェックはインストールおよびアップグレードごとに実行されます。新しいPHPバージョンのインストールまたはPHP拡張モジュールの有効化に関して分からない場合、あなたのサーバ管理者にご連絡ください。';
-$string['errorsinenvironment'] = '環境チェックに失敗しました!';
+$string['errorsinenvironment'] = '環境チェックが失敗しました!';
 $string['installation'] = 'インストレーション';
 $string['langdownloaderror'] = '残念ですが、言語「 {$a} 」をダウンロードできませんでした。インストール処理は英語で継続されます。';
 $string['memorylimithelp'] = '<p>現在、サーバのPHPメモリ制限が {$a} に設定されています。</p>
@@ -84,7 +84,7 @@ $string['pathsunsecuredataroot'] = 'dataroot ロケーションが安全では�
 $string['pathswrongadmindir'] = 'adminディレクトリがありません。';
 $string['phpextension'] = '{$a} PHP拡張モジュール';
 $string['phpversion'] = 'PHPバージョン';
-$string['phpversionhelp'] = '<p>Moodleには少なくとも5.4.4のPHPバージョンが必要です (7.x にはエンジンの制限があります)。</p>
+$string['phpversionhelp'] = '<p>Moodleには少なくとも5.6.5または7.1のPHPバージョンが必要です (7.0.x にはエンジンの制限があります)。</p>
 <p>現在、あなたはバージョン {$a} を動作させています。</p>
 <p>PHPをアップグレードするか新しいバージョンのPHPがインストールされているホストに移動する必要があります。</p>';
 $string['welcomep10'] = '{$a->installername} ({$a->installerversion})';

@@ -73,13 +73,13 @@ class cache_config_testing extends cache_config_writer {
             if (class_exists($class) && $class::ready_to_be_used_for_testing()) {
                 /* @var cache_store $class */
                 $writer->configstores['test_application'] = array(
-                    'use_test_store' => true,
                     'name' => 'test_application',
                     'plugin' => $expectedstore,
-                    'alt' => $writer->configstores[$defaultapplication],
                     'modes' => $class::get_supported_modes(),
-                    'features' => $class::get_supported_features()
+                    'features' => $class::get_supported_features(),
+                    'configuration' => $class::unit_test_configuration()
                 );
+
                 $defaultapplication = 'test_application';
             }
         }
@@ -288,6 +288,20 @@ class cache_config_testing extends cache_config_writer {
         global $CFG;
         return $CFG->wwwroot.'phpunit';
     }
+
+    /**
+     * Checks if the configuration file exists.
+     *
+     * @return bool True if it exists
+     */
+    public static function config_file_exists() {
+        // Allow for late static binding by using static.
+        $configfilepath = static::get_config_file_path();
+
+        // Invalidate opcode php cache, so we get correct status of file.
+        core_component::invalidate_opcode_php_cache($configfilepath);
+        return file_exists($configfilepath);
+    }
 }
 
 /**
@@ -297,6 +311,7 @@ class cache_config_testing extends cache_config_writer {
  * as it is only used during testing and its highly unlikely anyone has used this.
  *
  * @deprecated since 2.9
+ * @todo MDL-55267 This will be deleted in Moodle 3.3.
  * @copyright  2014 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -533,22 +548,5 @@ class cache_phpunit_factory extends cache_factory {
      */
     public static function phpunit_disable() {
         parent::disable();
-    }
-}
-
-/**
- * Cache PHPUnit specific Cache helper.
- *
- * @copyright  2018 Andrew Nicols <andrew@nicols.co.uk>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class cache_phpunit_cache extends cache {
-    /**
-     * Make the changes which simulate a new request within the cache.
-     * This essentially resets currently held static values in the class, and increments the current timestamp.
-     */
-    public static function simulate_new_request() {
-        self::$now += 0.1;
-        self::$purgetoken = null;
     }
 }

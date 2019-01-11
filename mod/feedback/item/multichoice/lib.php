@@ -207,6 +207,7 @@ class feedback_item_multichoice extends feedback_item_base {
         $analysed_item = $this->get_analysed($item, $groupid, $courseid);
         if ($analysed_item) {
             $itemname = $analysed_item[1];
+            echo "<table class=\"analysis itemtype_{$item->typ}\">";
             echo '<tr><th colspan="2" align="left">';
             echo $itemnr . ' ';
             if (strval($item->label) !== '') {
@@ -214,32 +215,32 @@ class feedback_item_multichoice extends feedback_item_base {
             }
             echo format_string($itemname);
             echo '</th></tr>';
-
+            echo "</table>";
             $analysed_vals = $analysed_item[2];
-            $pixnr = 0;
+            $count = 0;
+            $data = [];
             foreach ($analysed_vals as $val) {
-                $intvalue = $pixnr % 10;
-                $pix = $OUTPUT->pix_url('multichoice/' . $intvalue, 'feedback');
-                $pixspacer = $OUTPUT->pix_url('spacer');
-                $pixnr++;
-                $pixwidth = max(2, intval($val->quotient * FEEDBACK_MAX_PIX_LENGTH));
-                $pixwidthspacer = FEEDBACK_MAX_PIX_LENGTH + 1 - $pixwidth;
                 $quotient = format_float($val->quotient * 100, 2);
-                $str_quotient = '';
+                $strquotient = '';
                 if ($val->quotient > 0) {
-                    $str_quotient = ' ('. $quotient . ' %)';
+                    $strquotient = ' ('. $quotient . ' %)';
                 }
-                echo '<tr>';
-                echo '<td class="optionname">' .
-                            format_text(trim($val->answertext), FORMAT_HTML, array('noclean' => true, 'para' => false)).':
-                      </td>
-                      <td class="optioncount" style="width:'.FEEDBACK_MAX_PIX_LENGTH.';">
-                        <img class="feedback_bar_image" alt="'.$intvalue.'" src="'.$pix.'" width="'.$pixwidth.'" />'.
-                        '<img class="feedback_bar_image" alt="" src="'.$pixspacer.'" width="'.$pixwidthspacer.'" />
-                        '.$val->answercount.$str_quotient.'
-                      </td>';
-                echo '</tr>';
+                $answertext = format_text(trim($val->answertext), FORMAT_HTML,
+                        array('noclean' => true, 'para' => false));
+
+                $data['labels'][$count] = $answertext;
+                $data['series'][$count] = $val->answercount;
+                $data['series_labels'][$count] = $val->answercount . $strquotient;
+                $count++;
             }
+            $chart = new \core\chart_bar();
+            $chart->set_horizontal(true);
+            $series = new \core\chart_series(format_string(get_string("responses", "feedback")), $data['series']);
+            $series->set_labels($data['series_labels']);
+            $chart->add_series($series);
+            $chart->set_labels($data['labels']);
+
+            echo $OUTPUT->render($chart);
         }
     }
 
@@ -314,20 +315,14 @@ class feedback_item_multichoice extends feedback_item_base {
         $inputname = $item->typ . '_' . $item->id;
         $options = $this->get_options($item);
         $separator = !empty($info->horizontal) ? ' ' : '<br>';
-        $itemval = $form->get_item_value($item);
-        $tmpvalue = !is_null($itemval) ? $itemval : 0; // Used for element defaults, so must be a valid value (not null).
+        $tmpvalue = $form->get_item_value($item);
 
-        // Subtypes:
-        // r = radio
-        // c = checkbox
-        // d = dropdown.
         if ($info->subtype === 'd' || ($info->subtype === 'r' && $form->is_frozen())) {
             // Display as a dropdown in the complete form or a single value in the response view.
             $element = $form->add_form_element($item,
-                    ['select', $inputname, $name, array(0 => '') + $options, array('class' => $class)],
+                    ['select', $inputname.'[0]', $name, array(0 => '') + $options, array('class' => $class)],
                     false, false);
-            $form->set_element_default($inputname, $tmpvalue);
-            $form->set_element_type($inputname, PARAM_INT);
+            $form->set_element_default($inputname.'[0]', $tmpvalue);
         } else if ($info->subtype === 'c' && $form->is_frozen()) {
             // Display list of checkbox values in the response view.
             $objs = [];
@@ -347,6 +342,8 @@ class feedback_item_multichoice extends feedback_item_base {
                     $objs[] = ['advcheckbox', $inputname.'['.$idx.']', '', $label, null, array(0, $idx)];
                     $form->set_element_type($inputname.'['.$idx.']', PARAM_INT);
                 }
+                // Span to hold the element id. The id is used for drag and drop reordering.
+                $objs[] = ['static', '', '', html_writer::span('', '', ['id' => 'feedback_item_' . $item->id])];
                 $element = $form->add_form_group_element($item, 'group_'.$inputname, $name, $objs, $separator, $class);
                 if ($tmpvalue) {
                     foreach (explode(FEEDBACK_MULTICHOICE_LINE_SEP, $tmpvalue) as $v) {
@@ -356,24 +353,26 @@ class feedback_item_multichoice extends feedback_item_base {
             } else {
                 // Radio.
                 if (!array_key_exists(0, $options)) {
-                    // Always add a hidden element to the group to guarantee we get a value in the submit data.
-                    $objs[] = ['hidden', $inputname, 0];
+                    // Always add '0' as hidden element, otherwise form submit data may not have this element.
+                    $objs[] = ['hidden', $inputname.'[0]'];
                 }
                 foreach ($options as $idx => $label) {
-                    $objs[] = ['radio', $inputname, '', $label, $idx];
+                    $objs[] = ['radio', $inputname.'[0]', '', $label, $idx];
                 }
+                // Span to hold the element id. The id is used for drag and drop reordering.
+                $objs[] = ['static', '', '', html_writer::span('', '', ['id' => 'feedback_item_' . $item->id])];
                 $element = $form->add_form_group_element($item, 'group_'.$inputname, $name, $objs, $separator, $class);
-                $form->set_element_default($inputname, $tmpvalue);
-                $form->set_element_type($inputname, PARAM_INT);
+                $form->set_element_default($inputname.'[0]', $tmpvalue);
+                $form->set_element_type($inputname.'[0]', PARAM_INT);
             }
         }
 
         // Process 'required' rule.
         if ($item->required) {
             $elementname = $element->getName();
-            $form->add_validation_rule(function($values) use ($elementname, $item) {
+            $form->add_validation_rule(function($values, $files) use ($elementname, $item) {
                 $inputname = $item->typ . '_' . $item->id;
-                return empty($values[$inputname]) || (is_array($values[$inputname]) && !array_filter($values[$inputname])) ?
+                return empty($values[$inputname]) || !array_filter($values[$inputname]) ?
                     array($elementname => get_string('required')) : true;
             });
         }
@@ -385,9 +384,6 @@ class feedback_item_multichoice extends feedback_item_base {
      * @return string
      */
     public function create_value($value) {
-        // Could be an array (multichoice checkbox) or single value (multichoice radio or dropdown).
-        $value = is_array($value) ? $value : [$value];
-
         $value = array_unique(array_filter($value));
         return join(FEEDBACK_MULTICHOICE_LINE_SEP, $value);
     }
