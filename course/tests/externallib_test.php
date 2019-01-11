@@ -48,13 +48,6 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
     }
 
     /**
-     * Tidy up open files that may be left open.
-     */
-    protected function tearDown() {
-        gc_collect_cycles();
-    }
-
-    /**
      * Test create_categories
      */
     public function test_create_categories() {
@@ -208,6 +201,7 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
         // Set the required capabilities by the external function.
         $context = context_system::instance();
         $roleid = $this->assignUserCapability('moodle/category:manage', $context->id);
+        $this->assignUserCapability('moodle/category:viewhiddencategories', $context->id, $roleid);
 
         // Retrieve category1 + sub-categories except not visible ones
         $categories = core_course_external::get_categories(array(
@@ -266,8 +260,19 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
 
         $this->assertEquals($DB->count_records('course_categories'), count($categories));
 
+        $this->unassignUserCapability('moodle/category:viewhiddencategories', $context->id, $roleid);
+
+        // Ensure maxdepthcategory is 2 and retrieve all categories without category:viewhiddencategories capability.
+        // It should retrieve all visible categories as well.
+        set_config('maxcategorydepth', 2);
+        $categories = core_course_external::get_categories();
+
+        // We need to execute the return values cleaning process to simulate the web service server.
+        $categories = external_api::clean_returnvalue(core_course_external::get_categories_returns(), $categories);
+
+        $this->assertEquals($DB->count_records('course_categories', array('visible' => 1)), count($categories));
+
         // Call without required capability (it will fail cause of the search on idnumber).
-        $this->unassignUserCapability('moodle/category:manage', $context->id, $roleid);
         $this->setExpectedException('moodle_exception');
         $categories = core_course_external::get_categories(array(
             array('key' => 'id', 'value' => $category1->id),
@@ -458,7 +463,7 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
                 $this->assertEquals($courseinfo->numsections, $course3options['numsections']);
                 $this->assertEquals($courseinfo->coursedisplay, $course3options['coursedisplay']);
             } else {
-                throw moodle_exception('Unexpected shortname');
+                throw new moodle_exception('Unexpected shortname');
             }
         }
 
@@ -538,7 +543,9 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
 
         $generatedcourses = array();
         $coursedata['idnumber'] = 'idnumbercourse1';
-        $coursedata['fullname'] = 'Course 1 for PHPunit test';
+        // Adding tags here to check that format_string is applied.
+        $coursedata['fullname'] = '<b>Course 1 for PHPunit test</b>';
+        $coursedata['shortname'] = '<b>Course 1 for PHPunit test</b>';
         $coursedata['summary'] = 'Course 1 description';
         $coursedata['summaryformat'] = FORMAT_MOODLE;
         $course1  = self::getDataGenerator()->create_course($coursedata);
@@ -568,13 +575,16 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
         $this->assertEquals(2, count($courses));
 
         foreach ($courses as $course) {
+            $coursecontext = context_course::instance($course['id']);
             $dbcourse = $generatedcourses[$course['id']];
             $this->assertEquals($course['idnumber'], $dbcourse->idnumber);
-            $this->assertEquals($course['fullname'], $dbcourse->fullname);
+            $this->assertEquals($course['fullname'], external_format_string($dbcourse->fullname, $coursecontext->id));
+            $this->assertEquals($course['displayname'], external_format_string(get_course_display_name_for_list($dbcourse),
+                $coursecontext->id));
             // Summary was converted to the HTML format.
             $this->assertEquals($course['summary'], format_text($dbcourse->summary, FORMAT_MOODLE, array('para' => false)));
             $this->assertEquals($course['summaryformat'], FORMAT_HTML);
-            $this->assertEquals($course['shortname'], $dbcourse->shortname);
+            $this->assertEquals($course['shortname'], external_format_string($dbcourse->shortname, $coursecontext->id));
             $this->assertEquals($course['categoryid'], $dbcourse->category);
             $this->assertEquals($course['format'], $dbcourse->format);
             $this->assertEquals($course['showgrades'], $dbcourse->showgrades);
@@ -611,12 +621,37 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
     }
 
     /**
+     * Test get_courses without capability
+     */
+    public function test_get_courses_without_capability() {
+        $this->resetAfterTest(true);
+
+        $course1 = $this->getDataGenerator()->create_course();
+        $this->setUser($this->getDataGenerator()->create_user());
+
+        // No permissions are required to get the site course.
+        $courses = core_course_external::get_courses(array('ids' => [SITEID]));
+        $courses = external_api::clean_returnvalue(core_course_external::get_courses_returns(), $courses);
+
+        $this->assertEquals(1, count($courses));
+        $this->assertEquals('PHPUnit test site', $courses[0]['fullname']);
+        $this->assertEquals('site', $courses[0]['format']);
+
+        // Requesting course without being enrolled or capability to view it will throw an exception.
+        try {
+            core_course_external::get_courses(array('ids' => [$course1->id]));
+            $this->fail('Exception expected');
+        } catch (moodle_exception $e) {
+            $this->assertEquals(1, preg_match('/Course or activity not accessible. \(Not enrolled\)/', $e->getMessage()));
+        }
+    }
+
+    /**
      * Test search_courses
      */
     public function test_search_courses () {
 
-        global $DB, $CFG;
-        require_once($CFG->dirroot . '/tag/lib.php');
+        global $DB;
 
         $this->resetAfterTest(true);
         $this->setAdminUser();
@@ -646,8 +681,10 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
         // Enable coursetag option.
         set_config('block_tags_showcoursetags', true);
         // Add tag 'TAG-LABEL ON SECOND COURSE' to Course2.
-        tag_set('course', $course2->id, array('TAG-LABEL ON SECOND COURSE'), 'core', context_course::instance($course2->id)->id);
-        $taginstance = $DB->get_record('tag_instance', array('itemtype' => 'course', 'itemid' => $course2->id), '*', MUST_EXIST);
+        core_tag_tag::set_item_tags('core', 'course', $course2->id, context_course::instance($course2->id),
+                array('TAG-LABEL ON SECOND COURSE'));
+        $taginstance = $DB->get_record('tag_instance',
+                array('itemtype' => 'course', 'itemid' => $course2->id), '*', MUST_EXIST);
         // Search by tagid.
         $results = core_course_external::search_courses('tagid', $taginstance->tagid);
         $results = external_api::clean_returnvalue(core_course_external::search_courses_returns(), $results);
@@ -661,6 +698,14 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
 
         // Now as a normal user.
         $user = self::getDataGenerator()->create_user();
+
+        // Add a 3rd, hidden, course we shouldn't see, even when enrolled as student.
+        $coursedata3['fullname'] = 'HIDDEN COURSE';
+        $coursedata3['visible'] = 0;
+        $course3  = self::getDataGenerator()->create_course($coursedata3);
+        $this->getDataGenerator()->enrol_user($user->id, $course3->id, 'student');
+
+        $this->getDataGenerator()->enrol_user($user->id, $course2->id, 'student');
         $this->setUser($user);
 
         $results = core_course_external::search_courses('search', 'FIRST');
@@ -668,6 +713,19 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
         $this->assertCount(1, $results['courses']);
         $this->assertEquals(1, $results['total']);
         $this->assertEquals($coursedata1['fullname'], $results['courses'][0]['fullname']);
+
+        // Check that we can see both without the limit to enrolled setting.
+        $results = core_course_external::search_courses('search', 'COURSE', 0, 0, array(), 0);
+        $results = external_api::clean_returnvalue(core_course_external::search_courses_returns(), $results);
+        $this->assertCount(2, $results['courses']);
+        $this->assertEquals(2, $results['total']);
+
+        // Check that we only see our enrolled course when limiting.
+        $results = core_course_external::search_courses('search', 'COURSE', 0, 0, array(), 1);
+        $results = external_api::clean_returnvalue(core_course_external::search_courses_returns(), $results);
+        $this->assertCount(1, $results['courses']);
+        $this->assertEquals(1, $results['total']);
+        $this->assertEquals($coursedata2['fullname'], $results['courses'][0]['fullname']);
 
         // Search by block (use news_items default block). Should fail (only admins allowed).
         $this->setExpectedException('required_capability_exception');
@@ -1058,9 +1116,7 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
                     $this->assertEquals($course2['forcetheme'], $courseinfo->theme);
                 }
 
-                if (completion_info::is_enabled_for_site()) {
-                    $this->assertEquals($course2['enabledcompletion'], $courseinfo->enablecompletion);
-                }
+                $this->assertEquals($course2['enablecompletion'], $courseinfo->enablecompletion);
             } else if ($course['id'] == $course1['id']) {
                 $this->assertEquals($course1['fullname'], $courseinfo->fullname);
                 $this->assertEquals($course1['shortname'], $courseinfo->shortname);
@@ -1071,7 +1127,7 @@ class core_course_externallib_testcase extends externallib_advanced_testcase {
                 $this->assertEquals(0, $courseinfo->newsitems);
                 $this->assertEquals(FORMAT_MOODLE, $courseinfo->summaryformat);
             } else {
-                throw moodle_exception('Unexpected shortname');
+                throw new moodle_exception('Unexpected shortname');
             }
         }
 

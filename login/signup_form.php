@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -40,30 +39,30 @@ class login_signup_form extends moodleform {
 
 
         $mform->addElement('text', 'username', get_string('username'), 'maxlength="100" size="12"');
-        $mform->setType('username', PARAM_NOTAGS);
+        $mform->setType('username', PARAM_RAW);
         $mform->addRule('username', get_string('missingusername'), 'required', null, 'client');
 
         if (!empty($CFG->passwordpolicy)){
             $mform->addElement('static', 'passwordpolicyinfo', '', print_password_policy());
         }
         $mform->addElement('passwordunmask', 'password', get_string('password'), 'maxlength="32" size="12"');
-        $mform->setType('password', PARAM_RAW);
+        $mform->setType('password', core_user::get_property_type('password'));
         $mform->addRule('password', get_string('missingpassword'), 'required', null, 'client');
 
         $mform->addElement('header', 'supplyinfo', get_string('supplyinfo'),'');
 
         $mform->addElement('text', 'email', get_string('email'), 'maxlength="100" size="25"');
-        $mform->setType('email', PARAM_RAW_TRIMMED);
+        $mform->setType('email', core_user::get_property_type('email'));
         $mform->addRule('email', get_string('missingemail'), 'required', null, 'client');
 
         $mform->addElement('text', 'email2', get_string('emailagain'), 'maxlength="100" size="25"');
-        $mform->setType('email2', PARAM_RAW_TRIMMED);
+        $mform->setType('email2', core_user::get_property_type('email'));
         $mform->addRule('email2', get_string('missingemail'), 'required', null, 'client');
 
         $namefields = useredit_get_required_name_fields();
         foreach ($namefields as $field) {
             $mform->addElement('text', $field, get_string($field), 'maxlength="100" size="30"');
-            $mform->setType($field, PARAM_NOTAGS);
+            $mform->setType($field, core_user::get_property_type('firstname'));
             $stringid = 'missing' . $field;
             if (!get_string_manager()->string_exists($stringid, 'moodle')) {
                 $stringid = 'required';
@@ -72,7 +71,7 @@ class login_signup_form extends moodleform {
         }
 
         $mform->addElement('text', 'city', get_string('city'), 'maxlength="120" size="20"');
-        $mform->setType('city', PARAM_TEXT);
+        $mform->setType('city', core_user::get_property_type('city'));
         if (!empty($CFG->defaultcity)) {
             $mform->setDefault('city', $CFG->defaultcity);
         }
@@ -119,7 +118,15 @@ class login_signup_form extends moodleform {
         }
     }
 
-    function validation($data, $files) {
+    /**
+     * Validate user supplied data on the signup form.
+     *
+     * @param array $data array of ("fieldname"=>value) of submitted data
+     * @param array $files array of uploaded files "element_name"=>tmp_file_path
+     * @return array of "element_name"=>"error_description" if there are errors,
+     *         or an empty array if everything is OK (true allowed for backwards compatibility too).
+     */
+    public function validation($data, $files) {
         global $CFG, $DB;
         $errors = parent::validation($data, $files);
 
@@ -128,19 +135,19 @@ class login_signup_form extends moodleform {
         if ($DB->record_exists('user', array('username'=>$data['username'], 'mnethostid'=>$CFG->mnet_localhost_id))) {
             $errors['username'] = get_string('usernameexists');
         } else {
-            //check allowed characters
+            // Check allowed characters.
             if ($data['username'] !== core_text::strtolower($data['username'])) {
                 $errors['username'] = get_string('usernamelowercase');
             } else {
-                if ($data['username'] !== clean_param($data['username'], PARAM_USERNAME)) {
+                if ($data['username'] !== core_user::clean_field($data['username'], 'username')) {
                     $errors['username'] = get_string('invalidusername');
                 }
 
             }
         }
 
-        //check if user exists in external db
-        //TODO: maybe we should check all enabled plugins instead
+        // Check if user exists in external db.
+        // TODO: maybe we should check all enabled plugins instead.
         if ($authplugin->user_exists($data['username'])) {
             $errors['username'] = get_string('usernameexists');
         }
@@ -171,15 +178,14 @@ class login_signup_form extends moodleform {
         }
 
         if ($this->signup_captcha_enabled()) {
-            $recaptcha_element = $this->_form->getElement('recaptcha_element');
-            if (!empty($this->_form->_submitValues['recaptcha_challenge_field'])) {
-                $challenge_field = $this->_form->_submitValues['recaptcha_challenge_field'];
-                $response_field = $this->_form->_submitValues['recaptcha_response_field'];
-                if (true !== ($result = $recaptcha_element->verify($challenge_field, $response_field))) {
-                    $errors['recaptcha'] = $result;
+            $recaptchaelement = $this->_form->getElement('recaptcha_element');
+            if (!empty($this->_form->_submitValues['g-recaptcha-response'])) {
+                $response = $this->_form->_submitValues['g-recaptcha-response'];
+                if (!$recaptchaelement->verify($response)) {
+                    $errors['recaptcha_element'] = get_string('incorrectpleasetryagain', 'auth');
                 }
             } else {
-                $errors['recaptcha'] = get_string('missingrecaptchachallengefield');
+                $errors['recaptcha_element'] = get_string('missingrecaptchachallengefield');
             }
         }
         // Validate customisable profile fields. (profile_validation expects an object as the parameter with userid set)
@@ -188,7 +194,6 @@ class login_signup_form extends moodleform {
         $errors += profile_validation($dataobject, $files);
 
         return $errors;
-
     }
 
     /**

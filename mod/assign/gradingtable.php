@@ -176,7 +176,15 @@ class assign_grading_table extends table_sql implements renderable {
 
         $from .= 'LEFT JOIN {assign_user_flags} uf
                          ON u.id = uf.userid
-                        AND uf.assignment = :assignmentid3';
+                        AND uf.assignment = :assignmentid3 ';
+
+        if (!empty($this->assignment->get_instance()->blindmarking)) {
+            $from .= 'LEFT JOIN {assign_user_mapping} um
+                             ON u.id = um.userid
+                            AND um.assignment = :assignmentid5 ';
+            $params['assignmentid5'] = (int)$this->assignment->get_instance()->id;
+            $fields .= ', um.id as recordid ';
+        }
 
         $userparams = array();
         $userindex = 0;
@@ -228,9 +236,6 @@ class assign_grading_table extends table_sql implements renderable {
                         $params['markerid'] = $markerfilter;
                     }
                 }
-            } else { // Only show users allocated to this marker.
-                $where .= ' AND uf.allocatedmarker = :markerid';
-                $params['markerid'] = $USER->id;
             }
         }
 
@@ -470,8 +475,10 @@ class assign_grading_table extends table_sql implements renderable {
      * @return string
      */
     public function col_recordid(stdClass $row) {
-        return get_string('hiddenuser', 'assign') .
-               $this->assignment->get_uniqueid_for_user($row->userid);
+        if (empty($row->recordid)) {
+            $row->recordid = $this->assignment->get_uniqueid_for_user($row->userid);
+        }
+        return get_string('hiddenuser', 'assign') . $row->recordid;
     }
 
 
@@ -557,8 +564,9 @@ class assign_grading_table extends table_sql implements renderable {
             list($sort, $params) = users_order_by_sql();
             $markers = get_users_by_capability($this->assignment->get_context(), 'mod/assign:grade', '', $sort);
             $markerlist[0] = get_string('choosemarker', 'assign');
+            $viewfullnames = has_capability('moodle/site:viewfullnames', $this->assignment->get_context());
             foreach ($markers as $marker) {
-                $markerlist[$marker->id] = fullname($marker);
+                $markerlist[$marker->id] = fullname($marker, $viewfullnames);
             }
         }
         if (empty($markerlist)) {
@@ -567,7 +575,8 @@ class assign_grading_table extends table_sql implements renderable {
         }
         if ($this->is_downloading()) {
             if (isset($markers[$row->allocatedmarker])) {
-                return fullname($markers[$row->allocatedmarker]);
+                return fullname($markers[$row->allocatedmarker],
+                        has_capability('moodle/site:viewfullnames', $this->assignment->get_context()));
             } else {
                 return '';
             }
@@ -842,16 +851,21 @@ class assign_grading_table extends table_sql implements renderable {
         $gradingdisabled = $this->assignment->grading_disabled($row->id);
 
         if (!$this->is_downloading() && $this->hasgrade) {
-            $name = $this->assignment->fullname($row);
-            $icon = $this->output->pix_icon('gradefeedback',
-                                            get_string('gradeuser', 'assign', $name),
-                                            'mod_assign');
             $urlparams = array('id' => $this->assignment->get_course_module()->id,
-                               'rownum'=>$this->rownum,
-                               'action' => 'grade',
-                               'useridlistid' => $this->assignment->get_useridlist_key_id());
+                               'rownum' => 0,
+                               'action' => 'grader');
+
+            if ($this->assignment->is_blind_marking()) {
+                if (empty($row->recordid)) {
+                    $row->recordid = $this->assignment->get_uniqueid_for_user($row->userid);
+                }
+                $urlparams['blindid'] = $row->recordid;
+            } else {
+                $urlparams['userid'] = $row->userid;
+            }
+
             $url = new moodle_url('/mod/assign/view.php', $urlparams);
-            $link = $this->output->action_link($url, $icon);
+            $link = '<a href="' . $url . '" class="btn btn-primary">' . get_string('grade') . '</a>';
             $grade .= $link . $separator;
         }
 
@@ -1017,10 +1031,18 @@ class assign_grading_table extends table_sql implements renderable {
 
         $actions = array();
 
-        $urlparams = array('id'=>$this->assignment->get_course_module()->id,
-                           'rownum'=>$this->rownum,
-                           'action' => 'grade',
-                           'useridlistid' => $this->assignment->get_useridlist_key_id());
+        $urlparams = array('id' => $this->assignment->get_course_module()->id,
+                               'rownum' => 0,
+                               'action' => 'grader');
+
+        if ($this->assignment->is_blind_marking()) {
+            if (empty($row->recordid)) {
+                $row->recordid = $this->assignment->get_uniqueid_for_user($row->userid);
+            }
+            $urlparams['blindid'] = $row->recordid;
+        } else {
+            $urlparams['userid'] = $row->userid;
+        }
         $url = new moodle_url('/mod/assign/view.php', $urlparams);
         $noimage = null;
 
@@ -1406,7 +1428,17 @@ class assign_grading_table extends table_sql implements renderable {
      */
     public function get_sort_columns() {
         $result = parent::get_sort_columns();
-        $result = array_merge($result, array('userid' => SORT_ASC));
+
+        $assignment = $this->assignment->get_instance();
+        if (empty($assignment->blindmarking)) {
+            $result = array_merge($result, array('userid' => SORT_ASC));
+        } else {
+            $result = array_merge($result, [
+                    'COALESCE(s.timecreated, '  . time()        . ')'   => SORT_ASC,
+                    'COALESCE(s.id, '           . PHP_INT_MAX   . ')'   => SORT_ASC,
+                    'um.id'                                             => SORT_ASC,
+                ]);
+        }
         return $result;
     }
 

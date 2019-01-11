@@ -275,25 +275,32 @@ class core_admin_renderer extends plugin_renderer_base {
      * @param array|null $availableupdates array of \core\update\info objects or null
      * @param int|null $availableupdatesfetch timestamp of the most recent updates fetch or null (unknown)
      * @param string[] $cachewarnings An array containing warnings from the Cache API.
+     * @param array $eventshandlers Events 1 API handlers.
+     * @param bool $ignored Forward-compatible placeholder for the themedesignermode.
+     * @param bool $devlibdir Warn about development libs directory presence.
      *
      * @return string HTML to output.
      */
     public function admin_notifications_page($maturity, $insecuredataroot, $errorsdisplayed,
             $cronoverdue, $dbproblems, $maintenancemode, $availableupdates, $availableupdatesfetch,
-            $buggyiconvnomb, $registered, array $cachewarnings = array()) {
+            $buggyiconvnomb, $registered, array $cachewarnings = array(), $eventshandlers = 0,
+            $ignored = false, $devlibdir = false) {
         global $CFG;
         $output = '';
 
         $output .= $this->header();
         $output .= $this->maturity_info($maturity);
+        $output .= $this->legacy_log_store_writing_error();
         $output .= empty($CFG->disableupdatenotifications) ? $this->available_updates($availableupdates, $availableupdatesfetch) : '';
         $output .= $this->insecure_dataroot_warning($insecuredataroot);
+        $output .= $this->development_libs_directories_warning($devlibdir);
         $output .= $this->display_errors_warning($errorsdisplayed);
         $output .= $this->buggy_iconv_warning($buggyiconvnomb);
         $output .= $this->cron_overdue_warning($cronoverdue);
         $output .= $this->db_problems($dbproblems);
         $output .= $this->maintenance_mode_warning($maintenancemode);
         $output .= $this->cache_warnings($cachewarnings);
+        $output .= $this->events_handlers($eventshandlers);
         $output .= $this->registration_warning($registered);
 
         //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -517,6 +524,24 @@ class core_admin_renderer extends plugin_renderer_base {
     }
 
     /**
+     * Render a warning that a directory with development libs is present.
+     *
+     * @param bool $devlibdir True if the warning should be displayed.
+     * @return string
+     */
+    protected function development_libs_directories_warning($devlibdir) {
+
+        if ($devlibdir) {
+            $moreinfo = new moodle_url('/report/security/index.php');
+            $warning = get_string('devlibdirpresent', 'core_admin', ['moreinfourl' => $moreinfo->out()]);
+            return $this->warning($warning, 'error');
+
+        } else {
+            return '';
+        }
+    }
+
+    /**
      * Render an appropriate message if dataroot is insecure.
      * @param bool $errorsdisplayed
      * @return string HTML to output.
@@ -592,6 +617,23 @@ class core_admin_renderer extends plugin_renderer_base {
             return '';
         }
         return join("\n", array_map(array($this, 'warning'), $cachewarnings));
+    }
+
+    /**
+     * Renders events 1 API handlers warning.
+     *
+     * @param array $eventshandlers
+     * @return string
+     */
+    public function events_handlers($eventshandlers) {
+        if ($eventshandlers) {
+            $components = '';
+            foreach ($eventshandlers as $eventhandler) {
+                $components .= $eventhandler->component . ', ';
+            }
+            $components = rtrim($components, ', ');
+            return $this->warning(get_string('eventshandlersinuse', 'admin', $components));
+        }
     }
 
     /**
@@ -1578,7 +1620,7 @@ class core_admin_renderer extends plugin_renderer_base {
                 $row = new html_table_row();
                 $row->attributes['class'] = 'type-' . $plugin->type . ' name-' . $plugin->type . '_' . $plugin->name;
 
-                if ($this->page->theme->resolve_image_location('icon', $plugin->type . '_' . $plugin->name)) {
+                if ($this->page->theme->resolve_image_location('icon', $plugin->type . '_' . $plugin->name, null)) {
                     $icon = $this->output->pix_icon('icon', '', $plugin->type . '_' . $plugin->name, array('class' => 'icon pluginicon'));
                 } else {
                     $icon = $this->output->pix_icon('spacer', '', 'moodle', array('class' => 'icon pluginicon noicon'));
@@ -1934,5 +1976,20 @@ class core_admin_renderer extends plugin_renderer_base {
         $output .= $this->footer();
 
         return $output;
+    }
+
+    /**
+     * Check to see if writing to the deprecated legacy log store is enabled.
+     *
+     * @return string An error message if writing to the legacy log store is enabled.
+     */
+    protected function legacy_log_store_writing_error() {
+        $enabled = get_config('logstore_legacy', 'loglegacy');
+        $plugins = explode(',', get_config('tool_log', 'enabled_stores'));
+        $enabled = $enabled && in_array('logstore_legacy', $plugins);
+
+        if ($enabled) {
+            return $this->warning(get_string('legacylogginginuse'));
+        }
     }
 }

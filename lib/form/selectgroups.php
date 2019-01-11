@@ -75,9 +75,12 @@ class MoodleQuickForm_selectgroups extends HTML_QuickForm_element {
     }
 
     /**
-     * Old syntax of class constructor for backward compatibility.
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
      */
     public function MoodleQuickForm_selectgroups($elementName=null, $elementLabel=null, $optgrps=null, $attributes=null, $showchoose=false) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
         self::__construct($elementName, $elementLabel, $optgrps, $attributes, $showchoose);
     }
 
@@ -368,6 +371,9 @@ class MoodleQuickForm_selectgroups extends HTML_QuickForm_element {
         if (is_array($this->_values)) {
             foreach ($this->_values as $key => $val) {
                 foreach ($this->_optGroups as $optGroup) {
+                    if (empty($optGroup['options'])) {
+                        continue;
+                    }
                     for ($i = 0, $optCount = count($optGroup['options']); $i < $optCount; $i++) {
                         if ((string)$val == (string)$optGroup['options'][$i]['attr']['value']) {
                             $value[$key] = $optGroup['options'][$i]['text'];

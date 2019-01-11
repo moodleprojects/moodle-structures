@@ -26,7 +26,6 @@ if (isset($_SERVER['REMOTE_ADDR'])) {
     die(); // No access from web!
 }
 
-define('BEHAT_UTIL', true);
 define('CLI_SCRIPT', true);
 define('ABORT_AFTER_CONFIG', true);
 define('CACHE_DISABLE_ALL', true);
@@ -123,10 +122,14 @@ $tags = '';
 
 if ($options['profile']) {
     $profile = $options['profile'];
-    if (!isset($CFG->behat_config[$profile]) && !isset($CFG->behat_profiles[$profile])) {
+
+    // If profile passed is not set, then exit.
+    if (!isset($CFG->behat_config[$profile]) && !isset($CFG->behat_profiles[$profile]) &&
+        !(isset($options['replace']) && (strpos($options['profile'], $options['replace']) >= 0 ))) {
         echo "Invalid profile passed: " . $profile . PHP_EOL;
         exit(1);
     }
+
     $extraopts[] = '--profile="' . $profile . '"';
     // By default, profile tags will be used.
     if (!empty($CFG->behat_config[$profile]['filters']['tags'])) {

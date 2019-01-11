@@ -147,11 +147,17 @@ M.mod_assign.init_grading_options = function(Y) {
             Y.one('form.gradingoptionsform').submit();
             });
         }
+        var downloadasfolderselement = Y.one('#id_downloadasfolders');
+        if (downloadasfolderselement) {
+            downloadasfolderselement.on('change', function(e) {
+                Y.one('form.gradingoptionsform').submit();
+            });
+        }
     });
 };
 
 M.mod_assign.init_grade_change = function(Y) {
-    var gradenode = Y.one('#id_grade_modgrade_point');
+    var gradenode = Y.one('#id_grade');
     if (gradenode) {
         var originalvalue = gradenode.get('value');
         gradenode.on('change', function() {

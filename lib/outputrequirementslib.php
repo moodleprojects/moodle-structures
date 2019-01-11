@@ -296,6 +296,7 @@ class page_requirements_manager {
 
         // Every page should include definition of following modules.
         $this->js_module($this->find_module('core_filepicker'));
+        $this->js_module($this->find_module('core_comment'));
     }
 
     /**
@@ -747,7 +748,7 @@ class page_requirements_manager {
                 case 'core_comment':
                     $module = array('name'     => 'core_comment',
                                     'fullpath' => '/comment/comment.js',
-                                    'requires' => array('base', 'io-base', 'node', 'json', 'yui2-animation', 'overlay'),
+                                    'requires' => array('base', 'io-base', 'node', 'json', 'yui2-animation', 'overlay', 'escape'),
                                     'strings' => array(array('confirmdeletecomments', 'admin'), array('yes', 'moodle'), array('no', 'moodle'))
                                 );
                     break;
@@ -785,7 +786,8 @@ class page_requirements_manager {
                                     'fullpath' => '/lib/form/dndupload.js',
                                     'requires' => array('node', 'event', 'json', 'core_filepicker'),
                                     'strings'  => array(array('uploadformlimit', 'moodle'), array('droptoupload', 'moodle'), array('maxfilesreached', 'moodle'),
-                                                        array('dndenabled_inbox', 'moodle'), array('fileexists', 'moodle'), array('maxbytesforfile', 'moodle'),
+                                                        array('dndenabled_inbox', 'moodle'), array('fileexists', 'moodle'), array('maxbytesfile', 'error'),
+                                                        array('sizegb', 'moodle'), array('sizemb', 'moodle'), array('sizekb', 'moodle'), array('sizeb', 'moodle'),
                                                         array('maxareabytesreached', 'moodle'), array('serverconnection', 'error'),
                                                     ));
                     break;
@@ -1612,6 +1614,7 @@ class page_requirements_manager {
             'areyousure',
             'closebuttontitle',
             'unknownerror',
+            'changesmadereallygoaway',
         ), 'moodle');
         if (!empty($this->stringsforjs)) {
             $strings = array();

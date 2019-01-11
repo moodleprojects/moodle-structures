@@ -44,6 +44,7 @@ Feature: We can use calculated grade totals
     And I follow "Course 1"
     And I navigate to "Grades" node in "Course administration"
     And I turn editing mode on
+    And I change window size to "large"
     And I give the grade "60.00" to the user "Student 1" for the grade item "Test assignment one"
     And I give the grade "20.00" to the user "Student 1" for the grade item "Test assignment two"
     And I give the grade "40.00" to the user "Student 1" for the grade item "Test assignment three"
@@ -58,6 +59,7 @@ Feature: We can use calculated grade totals
       | Hidden | 1 |
     And I set the following settings for grade item "Test assignment eight":
       | Hidden | 1 |
+    And I change window size to "medium"
     And I navigate to "Course grade settings" node in "Grade administration > Setup"
     And I set the field "Grade display type" to "Real (percentage)"
     And I press "Save changes"
@@ -343,6 +345,7 @@ Feature: We can use calculated grade totals
     And I set the field "Show weightings" to "Show"
     And I press "Save changes"
     And I select "User report" from the "Grade report" singleselect
+    And I select "Myself" from the "View report as" singleselect
     And I select "Student 1" from the "Select all or one user" singleselect
     And the following should exist in the "user-grade" table:
       | Grade item | Calculated weight | Grade | Range | Contribution to course total |
@@ -425,6 +428,7 @@ Feature: We can use calculated grade totals
     And I set the following settings for grade item "Manual item 2":
       | Extra credit  | 0   |
       | Maximum grade | 200 |
+      | Rescale existing grades | No |
     And I give the grade "21.00" to the user "Student 1" for the grade item "Manual item 2"
     And I press "Save changes"
     And I give the grade "20.00" to the user "Student 1" for the grade item "Manual item 2"
@@ -435,6 +439,7 @@ Feature: We can use calculated grade totals
     And I set the following settings for grade item "Manual item 2":
       | Extra credit  | 0   |
       | Maximum grade | 100 |
+      | Rescale existing grades | No |
     And I give the grade "21.00" to the user "Student 1" for the grade item "Manual item 2"
     And I press "Save changes"
     And I give the grade "20.00" to the user "Student 1" for the grade item "Manual item 2"
@@ -530,6 +535,7 @@ Feature: We can use calculated grade totals
     And I press "Save changes"
     Then I should see "75.00 (16.85 %)" in the ".course" "css_element"
     And I select "User report" from the "Grade report" singleselect
+    And I select "Myself" from the "View report as" singleselect
     And I select "Student 1" from the "Select all or one user" singleselect
     And the following should exist in the "user-grade" table:
       | Grade item            | Calculated weight | Grade           | Contribution to course total |

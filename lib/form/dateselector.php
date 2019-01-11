@@ -105,9 +105,12 @@ class MoodleQuickForm_date_selector extends MoodleQuickForm_group {
     }
 
     /**
-     * Old syntax of class constructor for backward compatibility.
+     * Old syntax of class constructor. Deprecated in PHP7.
+     *
+     * @deprecated since Moodle 3.1
      */
     public function MoodleQuickForm_date_selector($elementName = null, $elementLabel = null, $options = array(), $attributes = null) {
+        debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
         self::__construct($elementName, $elementLabel, $options, $attributes);
     }
 
@@ -125,6 +128,10 @@ class MoodleQuickForm_date_selector extends MoodleQuickForm_group {
         $this->_elements = array();
 
         $dateformat = $calendartype->get_date_order($this->_options['startyear'], $this->_options['stopyear']);
+        // Reverse date element (Day, Month, Year), in RTL mode.
+        if (right_to_left()) {
+            $dateformat = array_reverse($dateformat);
+        }
         foreach ($dateformat as $key => $value) {
             // E_STRICT creating elements without forms is nasty because it internally uses $this
             $this->_elements[] = @MoodleQuickForm::createElement('select', $key, get_string($key, 'form'), $value, $this->getAttributes(), true);

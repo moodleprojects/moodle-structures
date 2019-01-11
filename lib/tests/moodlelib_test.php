@@ -1170,6 +1170,26 @@ class core_moodlelib_testcase extends advanced_testcase {
         }
     }
 
+    public function test_set_user_preference_for_current_user() {
+        global $USER;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        set_user_preference('test_pref', 2);
+        set_user_preference('test_pref', 1, $USER->id);
+        $this->assertEquals(1, get_user_preferences('test_pref'));
+    }
+
+    public function test_unset_user_preference_for_current_user() {
+        global $USER;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        set_user_preference('test_pref', 1);
+        unset_user_preference('test_pref', $USER->id);
+        $this->assertNull(get_user_preferences('test_pref'));
+    }
+
     public function test_get_extra_user_fields() {
         global $CFG, $USER, $DB;
         $this->resetAfterTest();
@@ -2642,6 +2662,123 @@ class core_moodlelib_testcase extends advanced_testcase {
             $event->objectid);
         $this->assertEventLegacyLogData($expectedlogdata, $event);
         $this->assertEventContextNotUsed($event);
+    }
+
+    /**
+     * A data provider for testing email messageid
+     */
+    public function generate_email_messageid_provider() {
+        return array(
+            'nopath' => array(
+                'wwwroot' => 'http://www.example.com',
+                'ids' => array(
+                    'a-custom-id' => '<a-custom-id@www.example.com>',
+                    'an-id-with-/-a-slash' => '<an-id-with-%2F-a-slash@www.example.com>',
+                ),
+            ),
+            'path' => array(
+                'wwwroot' => 'http://www.example.com/path/subdir',
+                'ids' => array(
+                    'a-custom-id' => '<a-custom-id/path/subdir@www.example.com>',
+                    'an-id-with-/-a-slash' => '<an-id-with-%2F-a-slash/path/subdir@www.example.com>',
+                ),
+            ),
+        );
+    }
+
+    /**
+     * Test email message id generation
+     *
+     * @dataProvider generate_email_messageid_provider
+     *
+     * @param string $wwwroot The wwwroot
+     * @param array $msgids An array of msgid local parts and the final result
+     */
+    public function test_generate_email_messageid($wwwroot, $msgids) {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $CFG->wwwroot = $wwwroot;
+
+        foreach ($msgids as $local => $final) {
+            $this->assertEquals($final, generate_email_messageid($local));
+        }
+    }
+
+    /**
+     * A data provider for testing email diversion
+     */
+    public function diverted_emails_provider() {
+        return array(
+            'nodiverts' => array(
+                'divertallemailsto' => null,
+                'divertallemailsexcept' => null,
+                array(
+                    'foo@example.com',
+                    'test@real.com',
+                    'fred.jones@example.com',
+                    'dev1@dev.com',
+                    'fred@example.com',
+                    'fred+verp@example.com',
+                ),
+                false,
+            ),
+            'alldiverts' => array(
+                'divertallemailsto' => 'somewhere@elsewhere.com',
+                'divertallemailsexcept' => null,
+                array(
+                    'foo@example.com',
+                    'test@real.com',
+                    'fred.jones@example.com',
+                    'dev1@dev.com',
+                    'fred@example.com',
+                    'fred+verp@example.com',
+                ),
+                true,
+            ),
+            'alsodiverts' => array(
+                'divertallemailsto' => 'somewhere@elsewhere.com',
+                'divertallemailsexcept' => '@dev.com, fred(\+.*)?@example.com',
+                array(
+                    'foo@example.com',
+                    'test@real.com',
+                    'fred.jones@example.com',
+                ),
+                true,
+            ),
+            'divertsexceptions' => array(
+                'divertallemailsto' => 'somewhere@elsewhere.com',
+                'divertallemailsexcept' => '@dev.com, fred(\+.*)?@example.com',
+                array(
+                    'dev1@dev.com',
+                    'fred@example.com',
+                    'fred+verp@example.com',
+                ),
+                false,
+            ),
+        );
+    }
+
+    /**
+     * Test email diversion
+     *
+     * @dataProvider diverted_emails_provider
+     *
+     * @param string $divertallemailsto An optional email address
+     * @param string $divertallemailsexcept An optional exclusion list
+     * @param array $addresses An array of test addresses
+     * @param boolean $expected Expected result
+     */
+    public function test_email_should_be_diverted($divertallemailsto, $divertallemailsexcept, $addresses, $expected) {
+        global $CFG;
+
+        $this->resetAfterTest();
+        $CFG->divertallemailsto = $divertallemailsto;
+        $CFG->divertallemailsexcept = $divertallemailsexcept;
+
+        foreach ($addresses as $address) {
+            $this->assertEquals($expected, email_should_be_diverted($address));
+        }
     }
 
     public function test_email_to_user() {

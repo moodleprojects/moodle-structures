@@ -40,6 +40,7 @@ $env       = optional_param('env', 'filepicker', PARAM_ALPHA);  // Opened in edi
 $license   = optional_param('license', $CFG->sitedefaultlicense, PARAM_TEXT);
 $author    = optional_param('author', '', PARAM_TEXT);          // File author
 $source    = optional_param('source', '', PARAM_RAW);           // File to download
+$sourcekey = optional_param('sourcekey', '', PARAM_RAW);        // Used to verify the source.
 $itemid    = optional_param('itemid', 0, PARAM_INT);            // Itemid
 $page      = optional_param('page', '', PARAM_RAW);             // Page
 $maxbytes  = optional_param('maxbytes', 0, PARAM_INT);          // Maxbytes
@@ -156,6 +157,16 @@ switch ($action) {
         }
         // allow external links in url element all the time
         $allowexternallink = ($allowexternallink || ($env == 'url'));
+
+        // Validate the sourcekey.
+        if (empty($sourcekey)) {
+            throw new moodle_exception('missingsourcekey', 'repository');
+        }
+
+        // Check that the sourcekey matches.
+        if (sha1($source . repository::get_secret_key() . sesskey()) !== $sourcekey) {
+            throw new moodle_exception('sourcekeymismatch', 'repository');
+        }
 
         $reference = $repo->get_file_reference($source);
 
@@ -283,7 +294,9 @@ switch ($action) {
 
                 // Check if exceed maxbytes.
                 if ($maxbytes != -1 && filesize($downloadedfile['path']) > $maxbytes) {
-                    throw new file_exception('maxbytes');
+                    $maxbytesdisplay = display_size($maxbytes);
+                    throw new file_exception('maxbytesfile', (object) array('file' => $record->filename,
+                                                                            'size' => $maxbytesdisplay));
                 }
 
                 // Check if we exceed the max bytes of the area.

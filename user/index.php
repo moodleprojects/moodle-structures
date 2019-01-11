@@ -42,6 +42,7 @@ $search       = optional_param('search', '', PARAM_RAW); // Make sure it is proc
 $roleid       = optional_param('roleid', 0, PARAM_INT); // Optional roleid, 0 means all enrolled users (or all on the frontpage).
 $contextid    = optional_param('contextid', 0, PARAM_INT); // One of this or.
 $courseid     = optional_param('id', 0, PARAM_INT); // This are required.
+$selectall    = optional_param('selectall', false, PARAM_BOOL); // When rendering checkboxes against users mark them all checked.
 
 $PAGE->set_url('/user/index.php', array(
         'page' => $page,
@@ -454,10 +455,37 @@ if ($wheres) {
 $totalcount = $DB->count_records_sql("SELECT COUNT(u.id) $from $where", $params);
 
 if (!empty($search)) {
+    $conditions = array();
+
+    // Search by fullname.
     $fullname = $DB->sql_fullname('u.firstname', 'u.lastname');
-    $wheres[] = "(". $DB->sql_like($fullname, ':search1', false, false) .
-                " OR ". $DB->sql_like('email', ':search2', false, false) .
-                " OR ". $DB->sql_like('idnumber', ':search3', false, false) .") ";
+    $conditions[] = $DB->sql_like($fullname, ':search1', false, false);
+
+    // Search by email.
+    $email = $DB->sql_like('email', ':search2', false, false);
+    if (!in_array('email', $extrafields)) {
+        // Prevent users who hide their email address from being found by others
+        // who aren't allowed to see hidden email addresses.
+        $email = "(". $email ." AND (" .
+                "u.maildisplay <> :maildisplayhide " .
+                "OR u.id = :userid1". // User can always find himself.
+                "))";
+        $params['maildisplayhide'] = 0; // maildisplay=0 is hidden to everybody.
+        $params['userid1'] = $USER->id;
+    }
+    $conditions[] = $email;
+
+    // Search by idnumber.
+    $idnumber = $DB->sql_like('idnumber', ':search3', false, false);
+    if (!in_array('idnumber', $extrafields)) {
+        // Users who aren't allowed to see idnumbers should at most find themselves
+        // when searching for an idnumber.
+        $idnumber = "(". $idnumber . " AND u.id = :userid2)";
+        $params['userid2'] = $USER->id;
+    }
+    $conditions[] = $idnumber;
+
+    $wheres[] = "(". implode(" OR ", $conditions) .") ";
     $params['search1'] = "%$search%";
     $params['search2'] = "%$search%";
     $params['search3'] = "%$search%";
@@ -713,7 +741,12 @@ if ($mode === MODE_USERDETAILS) {    // Print simple listing.
                 $row->cells[2]->text .= implode('', $links);
 
                 if ($bulkoperations) {
-                    $row->cells[2]->text .= '<br /><input type="checkbox" class="usercheckbox" name="user'.$user->id.'" /> ';
+                    if ($selectall) {
+                        $checked = 'checked="true"';
+                    } else {
+                        $checked = '';
+                    }
+                    $row->cells[2]->text .= '<br /><input type="checkbox" class="usercheckbox" name="user'.$user->id.'" ' .$checked .'/> ';
                 }
                 $table->data = array($row);
                 echo html_writer::table($table);
@@ -767,7 +800,12 @@ if ($mode === MODE_USERDETAILS) {    // Print simple listing.
 
             $data = array();
             if ($bulkoperations) {
-                $data[] = '<input type="checkbox" class="usercheckbox" name="user'.$user->id.'" />';
+                if ($selectall) {
+                    $checked = 'checked="true"';
+                } else {
+                    $checked = '';
+                }
+                $data[] = '<input type="checkbox" class="usercheckbox" name="user'.$user->id.'" ' . $checked .'/>';
             }
             $data[] = $OUTPUT->user_picture($user, array('size' => 35, 'courseid' => $course->id));
             $data[] = $profilelink;
@@ -795,9 +833,40 @@ if ($mode === MODE_USERDETAILS) {    // Print simple listing.
 
 }
 
+$perpageurl = clone($baseurl);
+$perpageurl->remove_params('perpage');
+if ($perpage == SHOW_ALL_PAGE_SIZE) {
+    $perpageurl->param('perpage', DEFAULT_PAGE_SIZE);
+    echo $OUTPUT->container(html_writer::link($perpageurl, get_string('showperpage', '', DEFAULT_PAGE_SIZE)), array(), 'showall');
+
+} else if ($matchcount > 0 && $perpage < $matchcount) {
+    $perpageurl->param('perpage', SHOW_ALL_PAGE_SIZE);
+    echo $OUTPUT->container(html_writer::link($perpageurl, get_string('showall', '', $matchcount)), array(), 'showall');
+}
+
 if ($bulkoperations) {
     echo '<br /><div class="buttons">';
-    echo '<input type="button" id="checkall" value="'.get_string('selectall').'" /> ';
+
+    if ($matchcount > 0 && $perpage < $matchcount) {
+        $perpageurl = clone($baseurl);
+        $perpageurl->remove_params('perpage');
+        $perpageurl->param('perpage', SHOW_ALL_PAGE_SIZE);
+        $perpageurl->param('selectall', true);
+        $showalllink = $perpageurl;
+    } else {
+        $showalllink = false;
+    }
+
+    if ($perpage < $matchcount) {
+        // Select all users, refresh page showing all users and mark them all selected.
+        $label = get_string('selectalluserswithcount', 'moodle', $matchcount);
+        echo '<input type="button" id="checkall" value="' . $label . '" data-showallink="' . $showalllink . '" /> ';
+        // Select all users, mark all users on page as selected.
+        echo '<input type="button" id="checkallonpage" value="' . get_string('selectallusersonpage') . '" /> ';
+    } else {
+        echo '<input type="button" id="checkallonpage" value="' . get_string('selectall') . '" /> ';
+    }
+
     echo '<input type="button" id="checknone" value="'.get_string('deselectall').'" /> ';
     $displaylist = array();
     $displaylist['messageselect.php'] = get_string('messageselectadd');
@@ -826,17 +895,6 @@ if ($totalcount > $perpage) {
     echo '<form action="index.php" class="searchform"><div><input type="hidden" name="id" value="'.$course->id.'" />';
     echo '<label for="search">' . get_string('search', 'search') . ' </label>';
     echo '<input type="text" id="search" name="search" value="'.s($search).'" />&nbsp;<input type="submit" value="'.get_string('search').'" /></div></form>'."\n";
-}
-
-$perpageurl = clone($baseurl);
-$perpageurl->remove_params('perpage');
-if ($perpage == SHOW_ALL_PAGE_SIZE) {
-    $perpageurl->param('perpage', DEFAULT_PAGE_SIZE);
-    echo $OUTPUT->container(html_writer::link($perpageurl, get_string('showperpage', '', DEFAULT_PAGE_SIZE)), array(), 'showall');
-
-} else if ($matchcount > 0 && $perpage < $matchcount) {
-    $perpageurl->param('perpage', SHOW_ALL_PAGE_SIZE);
-    echo $OUTPUT->container(html_writer::link($perpageurl, get_string('showall', '', $matchcount)), array(), 'showall');
 }
 
 echo '</div>';  // Userlist.

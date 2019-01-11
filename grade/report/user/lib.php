@@ -30,6 +30,9 @@ define("GRADE_REPORT_USER_HIDE_HIDDEN", 0);
 define("GRADE_REPORT_USER_HIDE_UNTIL", 1);
 define("GRADE_REPORT_USER_SHOW_HIDDEN", 2);
 
+define("GRADE_REPORT_USER_VIEW_SELF", 1);
+define("GRADE_REPORT_USER_VIEW_USER", 2);
+
 /**
  * Class providing an API for the user report building and displaying.
  * @uses grade_report
@@ -1162,9 +1165,6 @@ function grade_report_user_profilereport($course, $user, $viewasuser = false) {
     if (!empty($course->showgrades)) {
 
         $context = context_course::instance($course->id);
-
-        //first make sure we have proper final grades - this must be done before constructing of the grade tree
-        grade_regrade_final_grades($course->id);
 
         /// return tracking object
         $gpr = new grade_plugin_return(array('type'=>'report', 'plugin'=>'user', 'courseid'=>$course->id, 'userid'=>$user->id));

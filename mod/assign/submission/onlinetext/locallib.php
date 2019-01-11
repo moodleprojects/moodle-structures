@@ -291,7 +291,7 @@ class assign_submission_onlinetext extends assign_submission_plugin {
      * @return array An array of field names and descriptions. (name=>description, ...)
      */
     public function get_editor_fields() {
-        return array('onlinetext' => get_string('pluginname', 'assignsubmission_comments'));
+        return array('onlinetext' => get_string('pluginname', 'assignsubmission_onlinetext'));
     }
 
     /**
@@ -618,7 +618,7 @@ class assign_submission_onlinetext extends assign_submission_plugin {
         $editorparams = array('text' => new external_value(PARAM_RAW, 'The text for this submission.'),
                               'format' => new external_value(PARAM_INT, 'The format for this submission'),
                               'itemid' => new external_value(PARAM_INT, 'The draft area id for files attached to the submission'));
-        $editorstructure = new external_single_structure($editorparams);
+        $editorstructure = new external_single_structure($editorparams, 'Editor structure', VALUE_OPTIONAL);
         return array('onlinetext_editor' => $editorstructure);
     }
 
