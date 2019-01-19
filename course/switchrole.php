@@ -101,8 +101,7 @@ if ($switchrole > 0 && has_capability('moodle/role:switchroles', $context)) {
 
     foreach ($roles as $key => $role) {
         $url = new moodle_url('/course/switchrole.php', array('id' => $id, 'switchrole' => $key, 'returnurl' => $returnurl));
-        // Button encodes special characters, apply htmlspecialchars_decode() to avoid double escaping.
-        echo $OUTPUT->container($OUTPUT->single_button($url, htmlspecialchars_decode($role)), 'm-x-3 m-b-1');
+        echo $OUTPUT->container($OUTPUT->single_button($url, $role), 'm-x-3 m-b-1');
     }
 
     $url = new moodle_url($returnurl);

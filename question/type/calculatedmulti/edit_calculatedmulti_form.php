@@ -54,8 +54,10 @@ class qtype_calculatedmulti_edit_form extends question_edit_form {
             if (isset($this->question->id)) {
                 // Remove prefix #{..}# if exists.
                 $this->initialname = $question->name;
-                $question->name = question_bank::get_qtype('calculated')
-                        ->clean_technical_prefix_from_question_name($question->name);
+                $regs= array();
+                if (preg_match('~#\{([^[:space:]]*)#~', $question->name , $regs)) {
+                    $question->name = str_replace($regs[0], '', $question->name);
+                };
             }
         }
         parent::__construct($submiturl, $question, $category, $contexts, $formeditable);

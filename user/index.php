@@ -455,37 +455,10 @@ if ($wheres) {
 $totalcount = $DB->count_records_sql("SELECT COUNT(u.id) $from $where", $params);
 
 if (!empty($search)) {
-    $conditions = array();
-
-    // Search by fullname.
     $fullname = $DB->sql_fullname('u.firstname', 'u.lastname');
-    $conditions[] = $DB->sql_like($fullname, ':search1', false, false);
-
-    // Search by email.
-    $email = $DB->sql_like('email', ':search2', false, false);
-    if (!in_array('email', $extrafields)) {
-        // Prevent users who hide their email address from being found by others
-        // who aren't allowed to see hidden email addresses.
-        $email = "(". $email ." AND (" .
-                "u.maildisplay <> :maildisplayhide " .
-                "OR u.id = :userid1". // User can always find himself.
-                "))";
-        $params['maildisplayhide'] = core_user::MAILDISPLAY_HIDE;
-        $params['userid1'] = $USER->id;
-    }
-    $conditions[] = $email;
-
-    // Search by idnumber.
-    $idnumber = $DB->sql_like('idnumber', ':search3', false, false);
-    if (!in_array('idnumber', $extrafields)) {
-        // Users who aren't allowed to see idnumbers should at most find themselves
-        // when searching for an idnumber.
-        $idnumber = "(". $idnumber . " AND u.id = :userid2)";
-        $params['userid2'] = $USER->id;
-    }
-    $conditions[] = $idnumber;
-
-    $wheres[] = "(". implode(" OR ", $conditions) .") ";
+    $wheres[] = "(". $DB->sql_like($fullname, ':search1', false, false) .
+                " OR ". $DB->sql_like('email', ':search2', false, false) .
+                " OR ". $DB->sql_like('idnumber', ':search3', false, false) .") ";
     $params['search1'] = "%$search%";
     $params['search2'] = "%$search%";
     $params['search3'] = "%$search%";
@@ -594,44 +567,8 @@ if ($mode === MODE_USERDETAILS) {    // Print simple listing.
     } else {
         if ($totalcount > $perpage) {
 
-            $firstinitial = $table->get_initial_first();
-            $lastinitial  = $table->get_initial_last();
-            $strall = get_string('all');
-            $alpha  = explode(',', get_string('alphabet', 'langconfig'));
-
-            // Bar of first initials.
-
-            echo '<div class="initialbar firstinitial">'.get_string('firstname').' : ';
-            if (!empty($firstinitial)) {
-                echo '<a href="'.$baseurl->out().'&amp;sifirst=">'.$strall.'</a>';
-            } else {
-                echo '<strong>'.$strall.'</strong>';
-            }
-            foreach ($alpha as $letter) {
-                if ($letter == $firstinitial) {
-                    echo ' <strong>'.$letter.'</strong>';
-                } else {
-                    echo ' <a href="'.$baseurl->out().'&amp;sifirst='.$letter.'">'.$letter.'</a>';
-                }
-            }
-            echo '</div>';
-
-            // Bar of last initials.
-
-            echo '<div class="initialbar lastinitial">'.get_string('lastname').' : ';
-            if (!empty($lastinitial)) {
-                echo '<a href="'.$baseurl->out().'&amp;silast=">'.$strall.'</a>';
-            } else {
-                echo '<strong>'.$strall.'</strong>';
-            }
-            foreach ($alpha as $letter) {
-                if ($letter == $lastinitial) {
-                    echo ' <strong>'.$letter.'</strong>';
-                } else {
-                    echo ' <a href="'.$baseurl->out().'&amp;silast='.$letter.'">'.$letter.'</a>';
-                }
-            }
-            echo '</div>';
+            // Initials bar.
+            $table->print_initials_bar();
 
             $pagingbar = new paging_bar($matchcount, intval($table->get_page_start() / $perpage), $perpage, $baseurl);
             $pagingbar->pagevar = 'spage';

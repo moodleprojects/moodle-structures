@@ -133,9 +133,7 @@ M.mod_chat_ajax.init = function(Y, cfg) {
             item.addClass((message.mymessage) ? 'mdl-chat-my-entry' : 'mdl-chat-entry');
             Y.one('#messages-list').append(item);
             if (message.type && message.type == 'beep') {
-                var audioElement = document.createElement('audio');
-                audioElement.setAttribute('src', '../beep.mp3');
-                audioElement.play();
+                Y.one('#chat-notify').setContent('<embed src="../beep.wav" autostart="true" hidden="true" name="beep" />');
             }
         },
 

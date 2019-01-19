@@ -236,9 +236,7 @@ class enrol_cohort_plugin extends enrol_plugin {
         $params['ue'] = $ue->id;
         if ($this->allow_unenrol_user($instance, $ue) && has_capability('enrol/cohort:unenrol', $context)) {
             $url = new moodle_url('/enrol/unenroluser.php', $params);
-            $strunenrol = get_string('unenrol', 'enrol');
-            $actions[] = new user_enrolment_action(new pix_icon('t/delete', $strunenrol),
-                $strunenrol, $url, array('class' => 'unenrollink', 'rel' => $ue->id));
+            $actions[] = new user_enrolment_action(new pix_icon('t/delete', ''), get_string('unenrol', 'enrol'), $url, array('class'=>'unenrollink', 'rel'=>$ue->id));
         }
         return $actions;
     }

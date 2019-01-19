@@ -89,7 +89,7 @@ if ($PAGE->user_allowed_editing()) {
 $savebutton = false;
 $outputhtml = '';
 foreach ($settingspage->children as $childpage) {
-    if ($childpage->is_hidden() || !$childpage->check_access()) {
+    if ($childpage->is_hidden()) {
         continue;
     }
     if ($childpage instanceof admin_externalpage) {

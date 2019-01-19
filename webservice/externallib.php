@@ -188,12 +188,11 @@ class core_webservice_external extends external_api {
         // User quota. 0 means user can ignore the quota.
         $siteinfo['userquota'] = 0;
         if (!has_capability('moodle/user:ignoreuserquota', $context)) {
-            $siteinfo['userquota'] = (int) $CFG->userquota; // Cast to int to ensure value is not higher than PHP_INT_MAX.
+            $siteinfo['userquota'] = $CFG->userquota;
         }
 
         // User max upload file size. -1 means the user can ignore the upload file size.
-        // Cast to int to ensure value is not higher than PHP_INT_MAX.
-        $siteinfo['usermaxuploadfilesize'] = (int) get_user_max_upload_file_size($context, $CFG->maxbytes);
+        $siteinfo['usermaxuploadfilesize'] = get_user_max_upload_file_size($context, $CFG->maxbytes);
 
         // User home page.
         $siteinfo['userhomepage'] = get_home_page();

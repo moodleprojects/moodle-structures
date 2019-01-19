@@ -23,8 +23,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 require_once("$CFG->libdir/externallib.php");
 
 /**
@@ -133,7 +131,6 @@ class core_user_external extends external_api {
         global $CFG, $DB;
         require_once($CFG->dirroot."/lib/weblib.php");
         require_once($CFG->dirroot."/user/lib.php");
-        require_once($CFG->dirroot."/user/editlib.php");
         require_once($CFG->dirroot."/user/profile/lib.php"); // Required for customfields related function.
 
         // Ensure the current user is allowed to run this function.
@@ -548,16 +545,6 @@ class core_user_external extends external_api {
             if ($existinguser->deleted or is_mnet_remote_user($existinguser) or isguestuser($existinguser->id)) {
                 continue;
             }
-            // Check duplicated emails.
-            if (isset($user['email']) && $user['email'] !== $existinguser->email) {
-                if (!validate_email($user['email'])) {
-                    continue;
-                } else if (empty($CFG->allowaccountssameemail) &&
-                        $DB->record_exists('user', array('email' => $user['email'], 'mnethostid' => $CFG->mnet_localhost_id))) {
-                    continue;
-                }
-            }
-
             user_update_user($user, true, false);
 
             // Update user picture if it was specified for this user.

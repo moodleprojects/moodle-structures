@@ -106,15 +106,13 @@
     $PAGE->add_body_class('forumtype-'.$forum->type);
     $PAGE->set_heading($course->fullname);
 
-    // Some capability checks.
-    $courselink = new moodle_url('/course/view.php', ['id' => $cm->course]);
-
+/// Some capability checks.
     if (empty($cm->visible) and !has_capability('moodle/course:viewhiddenactivities', $context)) {
-        notice(get_string("activityiscurrentlyhidden"), $courselink);
+        notice(get_string("activityiscurrentlyhidden"));
     }
 
     if (!has_capability('mod/forum:viewdiscussion', $context)) {
-        notice(get_string('noviewdiscussionspermission', 'forum'), $courselink);
+        notice(get_string('noviewdiscussionspermission', 'forum'));
     }
 
     // Mark viewed and trigger the course_module_viewed event.

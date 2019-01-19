@@ -29,6 +29,7 @@
  * Active repository options
  * =====
  * this.active_repo.id
+ * this.active_repo.defaultreturntype
  * this.active_repo.nosearch
  * this.active_repo.norefresh
  * this.active_repo.nologin
@@ -424,27 +425,6 @@ YUI.add('moodle-core_filepicker', function(Y) {
                     element.on('contextmenu', options.rightclickcallback, options.callbackcontext, node);
                 }
             }
-        }
-
-        // Notify the user if any of the files has a problem status.
-        var problemFiles = [];
-        fileslist.forEach(function(file) {
-            if (!file_is_folder(file) && file.hasOwnProperty('status') && file.status != 0) {
-                problemFiles.push(file);
-            }
-        });
-        if (problemFiles.length > 0) {
-            require(["core/notification", "core/str"], function(Notification, Str) {
-                problemFiles.forEach(function(problemFile) {
-                    Str.get_string('storedfilecannotreadfile', 'error', problemFile.fullname).then(function(string) {
-                        Notification.addNotification({
-                            message: string,
-                            type: "error"
-                        });
-                        return;
-                    }).catch(Notification.exception);
-                });
-            });
         }
 
         // If table view, need some additional properties
@@ -916,6 +896,9 @@ M.core_filepicker.init = function(Y, options) {
             if (node.isref) {
                 classname = classname + ' fp-isreference';
             }
+            if (node.iscontrolledlink) {
+                classname = classname + ' fp-iscontrolledlink';
+            }
             if (node.refcount) {
                 classname = classname + ' fp-hasreferences';
             }
@@ -1101,7 +1084,7 @@ M.core_filepicker.init = function(Y, options) {
             selectnode.one('.fp-thumbnail').setContent('').appendChild(imgnode);
 
             // filelink is the array of file-link-types available for this repository in this env
-            var filelinktypes = [2/*FILE_INTERNAL*/,1/*FILE_EXTERNAL*/,4/*FILE_REFERENCE*/];
+            var filelinktypes = [2/*FILE_INTERNAL*/,1/*FILE_EXTERNAL*/,4/*FILE_REFERENCE*/,8/*FILE_CONTROLLED_LINK*/];
             var filelink = {}, firstfilelink = null, filelinkcount = 0;
             for (var i in filelinktypes) {
                 var allowed = (return_types & filelinktypes[i]) &&
@@ -1115,6 +1098,12 @@ M.core_filepicker.init = function(Y, options) {
                 firstfilelink = (firstfilelink==null && allowed) ? filelinktypes[i] : firstfilelink;
                 filelinkcount += allowed ? 1 : 0;
             }
+            var defaultreturntype = this.options.repositories[this.active_repo.id].defaultreturntype;
+            if (defaultreturntype) {
+                if (filelink[defaultreturntype]) {
+                    firstfilelink = defaultreturntype;
+                }
+            }
             // make radio buttons enabled if this file-link-type is available and only if there are more than one file-link-type option
             // check the first available file-link-type option
             for (var linktype in filelink) {
@@ -1127,7 +1116,6 @@ M.core_filepicker.init = function(Y, options) {
             selectnode.one('.fp-setauthor input').set('value', args.author ? args.author : this.options.author);
             this.set_selected_license(selectnode.one('.fp-setlicense'), args.license);
             selectnode.one('form #filesource-'+client_id).set('value', args.source);
-            selectnode.one('form #filesourcekey-'+client_id).set('value', args.sourcekey);
 
             // display static information about a file (when known)
             var attrs = ['datemodified','datecreated','size','license','author','dimensions'];
@@ -1144,12 +1132,13 @@ M.core_filepicker.init = function(Y, options) {
             var selectnode = this.selectnode;
             var getfile = selectnode.one('.fp-select-confirm');
             // bind labels with corresponding inputs
-            selectnode.all('.fp-saveas,.fp-linktype-2,.fp-linktype-1,.fp-linktype-4,.fp-setauthor,.fp-setlicense').each(function (node) {
+            selectnode.all('.fp-saveas,.fp-linktype-2,.fp-linktype-1,.fp-linktype-4,fp-linktype-8,.fp-setauthor,.fp-setlicense').each(function (node) {
                 node.all('label').set('for', node.one('input,select').generateID());
             });
             selectnode.one('.fp-linktype-2 input').setAttrs({value: 2, name: 'linktype'});
             selectnode.one('.fp-linktype-1 input').setAttrs({value: 1, name: 'linktype'});
             selectnode.one('.fp-linktype-4 input').setAttrs({value: 4, name: 'linktype'});
+            selectnode.one('.fp-linktype-8 input').setAttrs({value: 8, name: 'linktype'});
             var changelinktype = function(e) {
                 if (e.currentTarget.get('checked')) {
                     var allowinputs = e.currentTarget.get('value') != 1/*FILE_EXTERNAL*/;
@@ -1159,7 +1148,7 @@ M.core_filepicker.init = function(Y, options) {
                     });
                 }
             };
-            selectnode.all('.fp-linktype-2,.fp-linktype-1,.fp-linktype-4').each(function (node) {
+            selectnode.all('.fp-linktype-2,.fp-linktype-1,.fp-linktype-4,.fp-linktype-8').each(function (node) {
                 node.one('input').on('change', changelinktype, this);
             });
             this.populate_licenses_select(selectnode.one('.fp-setlicense select'));
@@ -1171,8 +1160,7 @@ M.core_filepicker.init = function(Y, options) {
                 var repository_id = this.active_repo.id;
                 var title = selectnode.one('.fp-saveas input').get('value');
                 var filesource = selectnode.one('form #filesource-'+client_id).get('value');
-                var filesourcekey = selectnode.one('form #filesourcekey-'+client_id).get('value');
-                var params = {'title':title, 'source':filesource, 'savepath': this.options.savepath, sourcekey: filesourcekey};
+                var params = {'title':title, 'source':filesource, 'savepath': this.options.savepath};
                 var license = selectnode.one('.fp-setlicense select');
                 if (license) {
                     params['license'] = license.get('value');
@@ -1198,6 +1186,10 @@ M.core_filepicker.init = function(Y, options) {
                         (this.options.return_types & 4/*FILE_REFERENCE*/) &&
                         selectnode.one('.fp-linktype-4 input').get('checked')) {
                     params['usefilereference'] = '1';
+                } else if ((return_types & 8/*FILE_CONTROLLED_LINK*/) &&
+                        (this.options.return_types & 8/*FILE_CONTROLLED_LINK*/) &&
+                        selectnode.one('.fp-linktype-8 input').get('checked')) {
+                    params['usecontrolledlink'] = '1';
                 }
 
                 selectnode.addClass('loading');
@@ -1230,8 +1222,6 @@ M.core_filepicker.init = function(Y, options) {
             var elform = selectnode.one('form');
             elform.appendChild(Y.Node.create('<input/>').
                 setAttrs({type:'hidden',id:'filesource-'+client_id}));
-            elform.appendChild(Y.Node.create('<input/>').
-                setAttrs({type:'hidden',id:'filesourcekey-'+client_id}));
             elform.on('keydown', function(e) {
                 if (e.keyCode == 13) {
                     getfile.simulate('click');
@@ -1440,6 +1430,7 @@ M.core_filepicker.init = function(Y, options) {
             this.objecttag = data.object?data.object:null;
             this.active_repo = {};
             this.active_repo.issearchresult = data.issearchresult ? true : false;
+            this.active_repo.defaultreturntype = data.defaultreturntype?data.defaultreturntype:null;
             this.active_repo.dynload = data.dynload?data.dynload:false;
             this.active_repo.pages = Number(data.pages?data.pages:null);
             this.active_repo.page = Number(data.page?data.page:null);

@@ -56,13 +56,7 @@ function download_as_dataformat($filename, $dataformat, $columns, $iterator, $ca
 
     $format->set_filename($filename);
     $format->send_http_headers();
-    // This exists to support all dataformats - see MDL-56046.
-    if (method_exists($format, 'write_header')) {
-        $format->write_header($columns);
-    } else {
-        $format->start_output();
-        $format->start_sheet($columns);
-    }
+    $format->write_header($columns);
     $c = 0;
     foreach ($iterator as $row) {
         if ($callback) {
@@ -73,12 +67,6 @@ function download_as_dataformat($filename, $dataformat, $columns, $iterator, $ca
         }
         $format->write_record($row, $c++);
     }
-    // This exists to support all dataformats - see MDL-56046.
-    if (method_exists($format, 'write_footer')) {
-        $format->write_footer($columns);
-    } else {
-        $format->close_sheet($columns);
-        $format->close_output();
-    }
+    $format->write_footer($columns);
 }
 

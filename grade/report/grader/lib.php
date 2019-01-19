@@ -736,8 +736,8 @@ class grade_report_grader extends grade_report {
                 if (empty($suspendedstring)) {
                     $suspendedstring = get_string('userenrolmentsuspended', 'grades');
                 }
-                $usercell->text .= html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('i/enrolmentsuspended'), 'title'=>$suspendedstring,
-                        'alt'=>$suspendedstring, 'class'=>'usersuspendedicon'));
+                $icon = $OUTPUT->pix_icon('i/enrolmentsuspended', $suspendedstring);
+                $usercell->text .= html_writer::tag('span', $icon, array('class'=>'usersuspendedicon'));
             }
 
             $userrow->cells[] = $usercell;
@@ -974,7 +974,7 @@ class grade_report_grader extends grade_report {
                 $usergrades = $this->allgrades[$userid];
                 $hidingaffected = grade_grade::get_hiding_affected($usergrades, $allgradeitems);
                 $altered = $hidingaffected['altered'];
-                $unknown = $hidingaffected['unknowngrades'];
+                $unknown = $hidingaffected['unknown'];
                 unset($hidingaffected);
             }
 
@@ -996,7 +996,7 @@ class grade_report_grader extends grade_report {
                 // Get the decimal points preference for this item
                 $decimalpoints = $item->get_decimals();
 
-                if (array_key_exists($itemid, $unknown)) {
+                if (in_array($itemid, $unknown)) {
                     $gradeval = null;
                 } else if (array_key_exists($itemid, $altered)) {
                     $gradeval = $altered[$itemid];

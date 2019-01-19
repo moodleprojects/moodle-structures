@@ -113,9 +113,6 @@ class curl_security_helper extends curl_security_helper_base {
      * 2. Check the host component against the list of domain names and wildcard domain names.
      *  - This will perform a DNS reverse lookup if required.
      *
-     * The behaviour of this function can be classified as strict, as it returns true for hosts which are invalid or
-     * could not be parsed, as well as those valid URLs which were found in the blacklist.
-     *
      * @param string $host the host component of the URL to check against the blacklist.
      * @return bool true if the host is both valid and blocked, false otherwise.
      */
@@ -135,8 +132,7 @@ class curl_security_helper extends curl_security_helper_base {
 
             // Only perform a reverse lookup if there is a point to it (i.e. we have rules to check against).
             if ($blacklistedhosts['domain'] || $blacklistedhosts['domainwildcard']) {
-                // DNS reverse lookup - supports both IPv4 and IPv6 address formats.
-                $hostname = gethostbyaddr($host);
+                $hostname = gethostbyaddr($host); // DNS reverse lookup - supports both IPv4 and IPv6 address formats.
                 if ($hostname !== $host && $this->host_explicitly_blocked($hostname)) {
                     return true;
                 }
@@ -148,37 +144,13 @@ class curl_security_helper extends curl_security_helper_base {
 
             // Only perform a forward lookup if there are IP rules to check against.
             if ($blacklistedhosts['ipv4'] || $blacklistedhosts['ipv6']) {
-                // DNS forward lookup - returns a list of only IPv4 addresses!
-                $hostips = $this->get_host_list_by_name($host);
-
-                // If we don't get a valid record, bail (so cURL is never called).
-                if (!$hostips) {
+                $hostip = gethostbyname($host); // DNS forward lookup - only returns IPv4 addresses!
+                if ($hostip !== $host && $this->address_explicitly_blocked($hostip)) {
                     return true;
                 }
-
-                // If any of the returned IPs are in the blacklist, block the request.
-                foreach ($hostips as $hostip) {
-                    if ($this->address_explicitly_blocked($hostip)) {
-                        return true;
-                    }
-                }
             }
-        } else {
-            // Was not something we consider to be a valid IP or domain name, block it.
-            return true;
         }
-
         return false;
-    }
-
-    /**
-     * Retrieve all hosts for a domain name.
-     *
-     * @param string $param
-     * @return array An array of IPs associated with the host name.
-     */
-    protected function get_host_list_by_name($host) {
-        return ($hostips = gethostbynamel($host)) ? $hostips : [];
     }
 
     /**

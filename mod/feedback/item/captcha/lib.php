@@ -25,13 +25,13 @@ class feedback_item_captcha extends feedback_item_base {
 
         $editurl = new moodle_url('/mod/feedback/edit.php', array('id'=>$cm->id));
 
-        // There are no settings for recaptcha.
+        //ther are no settings for recaptcha
         if (isset($item->id) AND $item->id > 0) {
             notice(get_string('there_are_no_settings_for_recaptcha', 'feedback'), $editurl->out());
             exit;
         }
 
-        // Only one recaptcha can be in a feedback.
+        //only one recaptcha can be in a feedback
         $params = array('feedback' => $feedback->id, 'typ' => $this->type);
         if ($DB->record_exists('feedback_item', $params)) {
             notice(get_string('only_one_captcha_allowed', 'feedback'), $editurl->out());
@@ -39,7 +39,7 @@ class feedback_item_captcha extends feedback_item_base {
         }
 
         $this->item = $item;
-        $this->item_form = true; // Dummy.
+        $this->item_form = true; //dummy
 
         $lastposition = $DB->count_records('feedback_item', array('feedback'=>$feedback->id));
 
@@ -140,13 +140,16 @@ class feedback_item_captcha extends feedback_item_base {
         $form->add_validation_rule(function($values, $files) use ($item, $form) {
             $elementname = $item->typ . '_' . $item->id . 'recaptcha';
             $recaptchaelement = $form->get_form_element($elementname);
-            if (empty($values['g-recaptcha-response'])) {
+            if (empty($values['recaptcha_response_field'])) {
                 return array($elementname => get_string('required'));
-            } else {
-                $response = $values['g-recaptcha-response'];
-                if (true !== ($result = $recaptchaelement->verify($response))) {
+            } else if (!empty($values['recaptcha_challenge_field'])) {
+                $challengefield = $values['recaptcha_challenge_field'];
+                $responsefield = $values['recaptcha_response_field'];
+                if (true !== ($result = $recaptchaelement->verify($challengefield, $responsefield))) {
                     return array($elementname => $result);
                 }
+            } else {
+                return array($elementname => get_string('missingrecaptchachallengefield'));
             }
             return true;
         });
@@ -161,7 +164,7 @@ class feedback_item_captcha extends feedback_item_base {
     public function get_hasvalue() {
         global $CFG;
 
-        // Is recaptcha configured in moodle?
+        //is recaptcha configured in moodle?
         if (empty($CFG->recaptchaprivatekey) OR empty($CFG->recaptchapublickey)) {
             return 0;
         }
@@ -184,5 +187,32 @@ class feedback_item_captcha extends feedback_item_base {
         $actions = parent::edit_actions($item, $feedback, $cm);
         unset($actions['update']);
         return $actions;
+    }
+
+    public function get_data_for_external($item) {
+        global $CFG;
+
+        if (empty($CFG->recaptchaprivatekey) || empty($CFG->recaptchapublickey)) {
+            return null;
+        }
+
+        require_once($CFG->libdir . '/recaptchalib.php');
+        // We return the public key, maybe we want to use the javascript api to get the image.
+        $data = recaptcha_get_challenge_hash_and_urls(RECAPTCHA_API_SECURE_SERVER, $CFG->recaptchapublickey);
+        $data[] = $CFG->recaptchapublickey;
+        return json_encode($data);
+    }
+
+    /**
+     * Return the analysis data ready for external functions.
+     *
+     * @param stdClass $item     the item (question) information
+     * @param int      $groupid  the group id to filter data (optional)
+     * @param int      $courseid the course id (optional)
+     * @return array an array of data with non scalar types json encoded
+     * @since  Moodle 3.3
+     */
+    public function get_analysed_for_external($item, $groupid = false, $courseid = false) {
+        return [];
     }
 }

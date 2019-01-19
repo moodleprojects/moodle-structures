@@ -31,7 +31,7 @@ $courseid = required_param('id', PARAM_INT);                   // course id
 $PAGE->set_url('/grade/report/outcomes/index.php', array('id'=>$courseid));
 
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
-    print_error('invalidcourseid');
+    print_error('nocourseid');
 }
 
 require_login($course);

@@ -386,11 +386,11 @@ function lti_build_request($instance, $typeconfig, $course, $typeid = null, $isl
         'lis_person_sourcedid' => $USER->idnumber,
         'roles' => $role,
         'context_id' => $course->id,
-        'context_label' => trim(html_to_text($course->shortname, 0)),
-        'context_title' => trim(html_to_text($course->fullname, 0)),
+        'context_label' => trim(html_to_text($course->shortname)),
+        'context_title' => trim(html_to_text($course->fullname)),
     );
     if (!empty($instance->name)) {
-        $requestparams['resource_link_title'] = trim(html_to_text($instance->name, 0));
+        $requestparams['resource_link_title'] = trim(html_to_text($instance->name));
     }
     if (!empty($instance->cmid)) {
         $intro = format_module_intro('lti', $instance, $instance->cmid);
@@ -531,11 +531,11 @@ function lti_build_standard_request($instance, $orgid, $islti2, $messagetype = '
         $requestparams["tool_consumer_instance_guid"] = $orgid;
     }
     if (!empty($CFG->mod_lti_institution_name)) {
-        $requestparams['tool_consumer_instance_name'] = trim(html_to_text($CFG->mod_lti_institution_name, 0));
+        $requestparams['tool_consumer_instance_name'] = trim(html_to_text($CFG->mod_lti_institution_name));
     } else {
         $requestparams['tool_consumer_instance_name'] = get_site()->shortname;
     }
-    $requestparams['tool_consumer_instance_description'] = trim(html_to_text(get_site()->fullname, 0));
+    $requestparams['tool_consumer_instance_description'] = trim(html_to_text(get_site()->fullname));
 
     return $requestparams;
 }
@@ -889,7 +889,12 @@ function lti_tool_configuration_from_content_item($typeid, $messagetype, $ltiver
         }
         if (isset($item->url)) {
             $url = new moodle_url($item->url);
-            $config->toolurl = $url->out(false);
+            // Assign item URL to securetoolurl or toolurl depending on its scheme.
+            if (strtolower($url->get_scheme()) === 'https') {
+                $config->securetoolurl = $url->out(false);
+            } else {
+                $config->toolurl = $url->out(false);
+            }
             $config->typeid = 0;
         } else {
             $config->typeid = $typeid;
@@ -1160,7 +1165,7 @@ function lti_get_enabled_capabilities($tool) {
  * @param string    $customstr      String containing the parameters
  * @param boolean   $islti2         True if an LTI 2 tool is being launched
  *
- * @return array of custom parameters
+ * @return Array of custom parameters
  */
 function lti_split_custom_parameters($toolproxy, $tool, $params, $customstr, $islti2 = false) {
     $customstr = str_replace("\r\n", "\n", $customstr);
@@ -1174,12 +1179,11 @@ function lti_split_custom_parameters($toolproxy, $tool, $params, $customstr, $is
             continue;
         }
         $key = trim(core_text::substr($line, 0, $pos));
-        $key = lti_map_keyname($key, false);
         $val = trim(core_text::substr($line, $pos + 1, strlen($line)));
         $val = lti_parse_custom_parameter($toolproxy, $tool, $params, $val, $islti2);
         $key2 = lti_map_keyname($key);
         $retval['custom_'.$key2] = $val;
-        if ($key != $key2) {
+        if ($islti2 && ($key != $key2)) {
             $retval['custom_'.$key] = $val;
         }
     }
@@ -1265,16 +1269,14 @@ function lti_parse_custom_parameter($toolproxy, $tool, $params, $value, $islti2)
  * Used for building the names of the different custom parameters
  *
  * @param string $key   Parameter name
- * @param bool $tolower Do we want to convert the key into lower case?
+ *
  * @return string       Processed name
  */
-function lti_map_keyname($key, $tolower = true) {
+function lti_map_keyname($key) {
     $newkey = "";
-    if ($tolower) {
-        $key = core_text::strtolower(trim($key));
-    }
+    $key = core_text::strtolower(trim($key));
     foreach (str_split($key) as $ch) {
-        if ( ($ch >= 'a' && $ch <= 'z') || ($ch >= '0' && $ch <= '9') || (!$tolower && ($ch >= 'A' && $ch <= 'Z'))) {
+        if ( ($ch >= 'a' && $ch <= 'z') || ($ch >= '0' && $ch <= '9') ) {
             $newkey .= $ch;
         } else {
             $newkey .= '_';
@@ -2518,13 +2520,7 @@ function lti_get_capabilities() {
     $capabilities = array(
        'basic-lti-launch-request' => '',
        'ContentItemSelectionRequest' => '',
-       'ToolProxyRegistrationRequest' => '',
        'Context.id' => 'context_id',
-       'Context.title' => 'context_title',
-       'Context.label' => 'context_label',
-       'Context.sourcedId' => 'lis_course_section_sourcedid',
-       'Context.longDescription' => '$COURSE->summary',
-       'Context.timeFrame.begin' => '$COURSE->startdate',
        'CourseSection.title' => 'context_title',
        'CourseSection.label' => 'context_label',
        'CourseSection.sourcedId' => 'lis_course_section_sourcedid',
@@ -2677,7 +2673,7 @@ function get_tool_type_icon_url(stdClass $type) {
     }
 
     if (empty($iconurl)) {
-        $iconurl = $OUTPUT->pix_url('icon', 'lti')->out();
+        $iconurl = $OUTPUT->image_url('icon', 'lti')->out();
     }
 
     return $iconurl;
@@ -2758,7 +2754,7 @@ function get_tool_proxy_urls(stdClass $proxy) {
     global $OUTPUT;
 
     $urls = array(
-        'icon' => $OUTPUT->pix_url('icon', 'lti')->out(),
+        'icon' => $OUTPUT->image_url('icon', 'lti')->out(),
         'edit' => get_tool_proxy_edit_url($proxy),
     );
 

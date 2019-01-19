@@ -682,7 +682,8 @@ class mod_quiz_renderer extends plugin_renderer_base {
             // Real question, show it.
             $flag = '';
             if ($attemptobj->is_question_flagged($slot)) {
-                $flag = html_writer::empty_tag('img', array('src' => $this->pix_url('i/flagged'),
+                // Quiz has custom JS manipulating these image tags - so we can't use the pix_icon method here.
+                $flag = html_writer::empty_tag('img', array('src' => $this->image_url('i/flagged'),
                         'alt' => get_string('flagged', 'question'), 'class' => 'questionflag icon-post'));
             }
             if ($attemptobj->can_navigate_to($slot)) {
@@ -839,9 +840,6 @@ class mod_quiz_renderer extends plugin_renderer_base {
 
         $button = new single_button($url, $buttontext);
         $button->class .= ' quizstartbuttondiv';
-        if ($popuprequired) {
-            $button->class .= ' quizsecuremoderequired';
-        }
 
         $popupjsoptions = null;
         if ($popuprequired && $popupoptions) {

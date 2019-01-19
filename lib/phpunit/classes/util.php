@@ -272,9 +272,6 @@ class phpunit_util extends testing_util {
         // Reset the log manager cache.
         get_log_manager(true);
 
-        // Reset user agent.
-        core_useragent::instance(true, null);
-
         // verify db writes just in case something goes wrong in reset
         if (self::$lastdbwrites != $DB->perf_get_writes()) {
             error_log('Unexpected DB writes in phpunit_util::reset_all_data()');
@@ -549,7 +546,15 @@ class phpunit_util extends testing_util {
             <testsuite name="@component@_testsuite">
                 <directory suffix="_test.php">.</directory>
             </testsuite>
-        </testsuites>';
+        </testsuites>
+        <filter>
+            <whitelist processUncoveredFilesFromWhitelist="false">
+                <directory suffix=".php">.</directory>
+                <exclude>
+                    <directory suffix="_test.php">.</directory>
+                </exclude>
+            </whitelist>
+        </filter>';
 
         // Start a sequence between 100000 and 199000 to ensure each call to init produces
         // different ids in the database.  This reduces the risk that hard coded values will

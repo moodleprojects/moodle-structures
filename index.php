@@ -38,6 +38,7 @@ if (!empty($CFG->defaulthomepage) && ($CFG->defaulthomepage == HOMEPAGE_MY) && o
     $urlparams['redirect'] = 0;
 }
 $PAGE->set_url('/', $urlparams);
+$PAGE->set_course($SITE);
 $PAGE->set_pagelayout('frontpage');
 $PAGE->set_other_editing_capability('moodle/course:update');
 $PAGE->set_other_editing_capability('moodle/course:manageactivities');
@@ -46,7 +47,11 @@ $PAGE->set_other_editing_capability('moodle/course:activityvisibility');
 // Prevent caching of this page to stop confusion when changing page after making AJAX changes.
 $PAGE->set_cacheable(false);
 
-require_course_login($SITE);
+if ($CFG->forcelogin) {
+    require_login();
+} else {
+    user_accesstime_log();
+}
 
 $hasmaintenanceaccess = has_capability('moodle/site:maintenanceaccess', context_system::instance());
 
@@ -164,9 +169,9 @@ if (!empty($CFG->customfrontpageinclude)) {
 
         if ($editing && has_capability('moodle/course:update', $context)) {
             $streditsummary = get_string('editsummary');
-            echo "<a title=\"$streditsummary\" ".
-                 " href=\"course/editsection.php?id=$section->id\"><img src=\"" . $OUTPUT->pix_url('t/edit') . "\" ".
-                 " class=\"iconsmall\" alt=\"$streditsummary\" /></a><br /><br />";
+            echo "<a title=\"$streditsummary\" " .
+                 " href=\"course/editsection.php?id=$section->id\">" . $OUTPUT->pix_icon('t/edit', $streditsummary) .
+                 "</a><br /><br />";
         }
 
         $courserenderer = $PAGE->get_renderer('core', 'course');

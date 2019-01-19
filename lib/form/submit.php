@@ -44,27 +44,14 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
     }
 
     /**
-     * @var bool $primary Is this button a primary button?
-     */
-    protected $primary;
-
-    /**
      * constructor
      *
      * @param string $elementName (optional) name of the field
      * @param string $value (optional) field label
      * @param string $attributes (optional) Either a typical HTML attribute string or an associative array
-     * @param bool|null $primary Is this button a primary button?
      */
-    public function __construct($elementName=null, $value=null, $attributes=null, $primary = null) {
+    public function __construct($elementName=null, $value=null, $attributes=null) {
         parent::__construct($elementName, $value, $attributes);
-
-        // Fallback to legacy behaviour if no value specified.
-        if (is_null($primary)) {
-            $this->primary = $this->getName() != 'cancel';
-        } else {
-            $this->primary = $primary;
-        }
     }
 
     /**
@@ -72,9 +59,9 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
      *
      * @deprecated since Moodle 3.1
      */
-    public function MoodleQuickForm_submit($elementName=null, $value=null, $attributes=null, $primary = null) {
+    public function MoodleQuickForm_submit($elementName=null, $value=null, $attributes=null) {
         debugging('Use of class name as constructor is deprecated', DEBUG_DEVELOPER);
-        self::__construct($elementName, $value, $attributes, $primary);
+        self::__construct($elementName, $value, $attributes);
     }
 
     /**
@@ -128,7 +115,7 @@ class MoodleQuickForm_submit extends HTML_QuickForm_submit implements templatabl
 
     public function export_for_template(renderer_base $output) {
         $context = $this->export_for_template_base($output);
-        if (!$this->primary) {
+        if ($this->getName() == 'cancel') {
             $context['secondary'] = true;
         }
         return $context;

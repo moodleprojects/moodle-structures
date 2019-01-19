@@ -77,8 +77,7 @@ if (!empty($day) && !empty($mon) && !empty($year)) {
 }
 
 if ($courseid != SITEID && !empty($courseid)) {
-    // Course ID must be valid and existing.
-    $course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
+    $course = $DB->get_record('course', array('id' => $courseid));
     $courses = array($course->id => $course);
     $issite = false;
 } else {
@@ -86,7 +85,7 @@ if ($courseid != SITEID && !empty($courseid)) {
     $courses = calendar_get_default_courses();
     $issite = true;
 }
-require_login($course, false);
+require_course_login($course);
 
 $url = new moodle_url('/calendar/export.php', array('time' => $time));
 
@@ -170,4 +169,5 @@ if ($action != 'advanced') {
 echo $calendarurl;
 
 echo $renderer->complete_layout();
+
 echo $OUTPUT->footer();

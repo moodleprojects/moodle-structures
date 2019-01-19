@@ -265,7 +265,7 @@ class Parser {
 			if (preg_match('/[0-9a-fA-F]/Su', $this->peek()) === 0) {
 				return $this->consume(1);
 			}
-			$sUnicode = $this->consumeExpression('/^[0-9a-fA-F]{1,6}/u', 6);
+			$sUnicode = $this->consumeExpression('/^[0-9a-fA-F]{1,6}/u');
 			if ($this->strlen($sUnicode) < 6) {
 				//Consume whitespace after incomplete unicode escape
 				if (preg_match('/\\s/isSu', $this->peek())) {
@@ -565,10 +565,9 @@ class Parser {
 		}
 	}
 
-	private function consumeExpression($mExpression, $iMaxLength = null) {
+	private function consumeExpression($mExpression) {
 		$aMatches = null;
-		$sInput = $iMaxLength !== null ? $this->peek($iMaxLength) : $this->inputLeft();
-		if (preg_match($mExpression, $sInput, $aMatches, PREG_OFFSET_CAPTURE) === 1) {
+		if (preg_match($mExpression, $this->inputLeft(), $aMatches, PREG_OFFSET_CAPTURE) === 1) {
 			return $this->consume($aMatches[0][0]);
 		}
 		throw new UnexpectedTokenException($mExpression, $this->peek(5), 'expression', $this->iLineNo);

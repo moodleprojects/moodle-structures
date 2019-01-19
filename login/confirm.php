@@ -24,8 +24,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(__DIR__ . '/../config.php');
-require(__DIR__ . '/lib.php');
+require('../config.php');
 require_once($CFG->libdir . '/authlib.php');
 
 $data = optional_param('data', '', PARAM_RAW);  // Formatted as:  secret/username
@@ -62,7 +61,7 @@ if (!empty($data) || (!empty($p) && !empty($s))) {
         echo $OUTPUT->header();
         echo $OUTPUT->box_start('generalbox centerpara boxwidthnormal boxaligncenter');
         echo "<p>".get_string("alreadyconfirmed")."</p>\n";
-        echo $OUTPUT->single_button(core_login_get_return_url(), get_string('courses'));
+        echo $OUTPUT->single_button("$CFG->wwwroot/course/", get_string('courses'));
         echo $OUTPUT->box_end();
         echo $OUTPUT->footer();
         exit;
@@ -79,6 +78,16 @@ if (!empty($data) || (!empty($p) && !empty($s))) {
             complete_user_login($user);
 
             \core\session\manager::apply_concurrent_login_limit($user->id, session_id());
+
+            // Check where to go, $redirect has a higher preference.
+            if (empty($redirect) and !empty($SESSION->wantsurl) ) {
+                $redirect = $SESSION->wantsurl;
+                unset($SESSION->wantsurl);
+            }
+
+            if (!empty($redirect)) {
+                redirect($redirect);
+            }
         }
 
         $PAGE->navbar->add(get_string("confirmed"));
@@ -88,7 +97,7 @@ if (!empty($data) || (!empty($p) && !empty($s))) {
         echo $OUTPUT->box_start('generalbox centerpara boxwidthnormal boxaligncenter');
         echo "<h3>".get_string("thanks").", ". fullname($USER) . "</h3>\n";
         echo "<p>".get_string("confirmed")."</p>\n";
-        echo $OUTPUT->single_button(core_login_get_return_url(), get_string('continue'));
+        echo $OUTPUT->single_button("$CFG->wwwroot/course/", get_string('courses'));
         echo $OUTPUT->box_end();
         echo $OUTPUT->footer();
         exit;

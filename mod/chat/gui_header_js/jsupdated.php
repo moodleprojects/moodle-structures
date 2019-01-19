@@ -223,11 +223,7 @@ EOD;
     print "//]]>\n";
     print '</script>' . "\n\n";
     if ($beep) {
-        print '<script> (function() {';
-        print 'var audioElement = document.createElement("audio");';
-        print 'audioElement.setAttribute("src", "../beep.mp3");';
-        print 'audioElement.play(); })();';
-        print '</script>';
+        print '<embed src="../beep.wav" autostart="true" hidden="true" name="beep" />';
     }
     print $CHAT_DUMMY_DATA;
     sleep($CFG->chat_refresh_room);

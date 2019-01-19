@@ -33,7 +33,7 @@ $userid   = optional_param('userid', $USER->id, PARAM_INT);
 $PAGE->set_url(new moodle_url('/grade/report/overview/index.php', array('id' => $courseid, 'userid' => $userid)));
 
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
-    print_error('invalidcourseid');
+    print_error('nocourseid');
 }
 require_login(null, false);
 $PAGE->set_course($course);
