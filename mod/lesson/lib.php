@@ -211,9 +211,9 @@ function lesson_update_events($lesson, $override = null) {
                 } else {
                     unset($event->id);
                 }
-                $event->name = $eventname.' ('.get_string('lessonopens', 'lesson').')';
+                $event->name = get_string('lessoneventopens', 'lesson', $eventname);
                 // The method calendar_event::create will reuse a db record if the id field is set.
-                calendar_event::create($event);
+                calendar_event::create($event, false);
             }
             if ($deadline && $addclose) {
                 if ($oldevent = array_shift($oldevents)) {
@@ -222,7 +222,7 @@ function lesson_update_events($lesson, $override = null) {
                     unset($event->id);
                 }
                 $event->type      = CALENDAR_EVENT_TYPE_ACTION;
-                $event->name      = $eventname.' ('.get_string('lessoncloses', 'lesson').')';
+                $event->name      = get_string('lessoneventcloses', 'lesson', $eventname);
                 $event->timestart = $deadline;
                 $event->timesort  = $deadline;
                 $event->eventtype = LESSON_EVENT_TYPE_CLOSE;
@@ -232,7 +232,7 @@ function lesson_update_events($lesson, $override = null) {
                         $event->priority = $closepriorities[$deadline];
                     }
                 }
-                calendar_event::create($event);
+                calendar_event::create($event, false);
             }
         }
     }
@@ -304,10 +304,21 @@ function lesson_get_group_override_priorities($lessonid) {
  * This function is used, in its new format, by restore_refresh_events()
  *
  * @param int $courseid
+ * @param int|stdClass $instance Lesson module instance or ID.
+ * @param int|stdClass $cm Course module object or ID (not used in this module).
  * @return bool
  */
-function lesson_refresh_events($courseid = 0) {
+function lesson_refresh_events($courseid = 0, $instance = null, $cm = null) {
     global $DB;
+
+    // If we have instance information then we can just update the one event instead of updating all events.
+    if (isset($instance)) {
+        if (!is_object($instance)) {
+            $instance = $DB->get_record('lesson', array('id' => $instance), '*', MUST_EXIST);
+        }
+        lesson_update_events($instance);
+        return true;
+    }
 
     if ($courseid == 0) {
         if (!$lessons = $DB->get_records('lesson')) {
@@ -979,6 +990,8 @@ function lesson_process_pre_save(&$lesson) {
 function lesson_process_post_save(&$lesson) {
     // Update the events relating to this lesson.
     lesson_update_events($lesson);
+    $completionexpected = (!empty($lesson->completionexpected)) ? $lesson->completionexpected : null;
+    \core_completion\api::update_completion_date_event($lesson->coursemodule, 'lesson', $lesson, $completionexpected);
 }
 
 
@@ -1107,6 +1120,8 @@ function lesson_reset_userdata($data) {
                        WHERE lessonid IN (SELECT id FROM {lesson} WHERE course = ?)
                          AND deadline <> 0", array($data->timeshift, $data->courseid));
 
+        // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+        // See MDL-9367.
         shift_course_mod_dates('lesson', array('available', 'deadline'), $data->timeshift, $data->courseid);
         $status[] = array('component'=>$componentstr, 'item'=>get_string('datechanged'), 'error'=>false);
     }
@@ -1601,16 +1616,22 @@ function lesson_check_updates_since(cm_info $cm, $from, $filter = array()) {
             $updates->userpagesviewed->itemids = array_keys($pagesviewed);
         }
 
-        $select = 'lessonid = ? AND completed > ? ' . $insql;
+        $select = 'lessonid = ? AND completed > ?';
+        if (!empty($insql)) {
+            $select .= ' AND userid ' . $insql;
+        }
         $grades = $DB->get_records_select('lesson_grades', $select, $params, '', 'id');
         if (!empty($grades)) {
             $updates->usergrades->updated = true;
             $updates->usergrades->itemids = array_keys($grades);
         }
 
-        $select = 'lessonid = ? AND (starttime > ? OR lessontime > ? OR timemodifiedoffline > ?) ' . $insql;
+        $select = 'lessonid = ? AND (starttime > ? OR lessontime > ? OR timemodifiedoffline > ?)';
         $params = array($cm->instance, $from, $from, $from);
-        $params = array_merge($params, $inparams);
+        if (!empty($insql)) {
+            $select .= ' AND userid ' . $insql;
+            $params = array_merge($params, $inparams);
+        }
         $timers = $DB->get_records_select('lesson_timer', $select, $params, '', 'id');
         if (!empty($timers)) {
             $updates->usertimers->updated = true;
@@ -1628,23 +1649,35 @@ function lesson_check_updates_since(cm_info $cm, $from, $filter = array()) {
  *
  * @param calendar_event $event
  * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
  * @return \core_calendar\local\event\entities\action_interface|null
  */
 function mod_lesson_core_calendar_provide_event_action(calendar_event $event,
-                                                       \core_calendar\action_factory $factory) {
+                                                       \core_calendar\action_factory $factory,
+                                                       int $userid = 0) {
     global $DB, $CFG, $USER;
     require_once($CFG->dirroot . '/mod/lesson/locallib.php');
 
-    $cm = get_fast_modinfo($event->courseid)->instances['lesson'][$event->instance];
+    if (!$userid) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['lesson'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
     $lesson = new lesson($DB->get_record('lesson', array('id' => $cm->instance), '*', MUST_EXIST));
 
-    if ($lesson->count_user_retries($USER->id)) {
+    if ($lesson->count_user_retries($userid)) {
         // If the user has attempted the lesson then there is no further action for the user.
         return null;
     }
 
     // Apply overrides.
-    $lesson->update_effective_access($USER->id);
+    $lesson->update_effective_access($userid);
 
     return $factory->create_instance(
         get_string('startlesson', 'lesson'),
