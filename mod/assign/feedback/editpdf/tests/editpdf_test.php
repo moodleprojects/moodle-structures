@@ -258,8 +258,7 @@ class assignfeedback_editpdf_testcase extends advanced_testcase {
 
         $comment = new comment();
 
-        // Use some different charset in the comment text.
-        $comment->rawtext = 'Testing example: בקלות ואמנות';
+        $comment->rawtext = 'Comment text';
         $comment->width = 100;
         $comment->x = 100;
         $comment->y = 100;

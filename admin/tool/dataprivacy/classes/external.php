@@ -63,6 +63,7 @@ class external extends external_api {
     /**
      * Parameter description for cancel_data_request().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function cancel_data_request_parameters() {
@@ -74,6 +75,7 @@ class external extends external_api {
     /**
      * Cancel a data request.
      *
+     * @since Moodle 3.5
      * @param int $requestid The request ID.
      * @return array
      * @throws invalid_persistent_exception
@@ -90,30 +92,17 @@ class external extends external_api {
         ]);
         $requestid = $params['requestid'];
 
-        // Validate context and access to manage the registry.
+        // Validate context.
         $context = context_user::instance($USER->id);
         self::validate_context($context);
 
         // Ensure the request exists.
         $select = 'id = :id AND (userid = :userid OR requestedby = :requestedby)';
         $params = ['id' => $requestid, 'userid' => $USER->id, 'requestedby' => $USER->id];
-        $requests = data_request::get_records_select($select, $params);
-        $requestexists = count($requests) === 1;
+        $requestexists = data_request::record_exists_select($select, $params);
 
         $result = false;
         if ($requestexists) {
-            $request = reset($requests);
-            $datasubject = $request->get('userid');
-
-            if ($datasubject !== $USER->id) {
-                // The user is not the subject. Check that they can cancel this request.
-                if (!api::can_create_data_request_for_user($datasubject)) {
-                    $forusercontext = \context_user::instance($datasubject);
-                    throw new required_capability_exception($forusercontext,
-                            'tool/dataprivacy:makedatarequestsforchildren', 'nopermissions', '');
-                }
-            }
-
             // TODO: Do we want a request to be non-cancellable past a certain point? E.g. When it's already approved/processing.
             $result = api::update_request_status($requestid, api::DATAREQUEST_STATUS_CANCELLED);
         } else {
@@ -133,6 +122,7 @@ class external extends external_api {
     /**
      * Parameter description for cancel_data_request().
      *
+     * @since Moodle 3.5
      * @return external_description
      */
     public static function cancel_data_request_returns() {
@@ -145,6 +135,7 @@ class external extends external_api {
     /**
      * Parameter description for contact_dpo().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function contact_dpo_parameters() {
@@ -156,6 +147,7 @@ class external extends external_api {
     /**
      * Make a general enquiry to a DPO.
      *
+     * @since Moodle 3.5
      * @param string $message The message to be sent to the DPO.
      * @return array
      * @throws coding_exception
@@ -221,6 +213,7 @@ class external extends external_api {
     /**
      * Parameter description for contact_dpo().
      *
+     * @since Moodle 3.5
      * @return external_description
      */
     public static function contact_dpo_returns() {
@@ -233,6 +226,7 @@ class external extends external_api {
     /**
      * Parameter description for mark_complete().
      *
+     * @since Moodle 3.5.2
      * @return external_function_parameters
      */
     public static function mark_complete_parameters() {
@@ -244,6 +238,7 @@ class external extends external_api {
     /**
      * Mark a user's general enquiry's status as complete.
      *
+     * @since Moodle 3.5.2
      * @param int $requestid The request ID of the general enquiry.
      * @return array
      * @throws coding_exception
@@ -262,10 +257,9 @@ class external extends external_api {
         ]);
         $requestid = $params['requestid'];
 
-        // Validate context and access to manage the registry.
+        // Validate context.
         $context = context_system::instance();
         self::validate_context($context);
-        api::check_can_manage_data_registry();
 
         $message = get_string('markedcomplete', 'tool_dataprivacy');
         // Update the data request record.
@@ -283,6 +277,7 @@ class external extends external_api {
     /**
      * Parameter description for mark_complete().
      *
+     * @since Moodle 3.5.2
      * @return external_description
      */
     public static function mark_complete_returns() {
@@ -295,6 +290,7 @@ class external extends external_api {
     /**
      * Parameter description for get_data_request().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function get_data_request_parameters() {
@@ -306,6 +302,7 @@ class external extends external_api {
     /**
      * Fetch the details of a user's data request.
      *
+     * @since Moodle 3.5
      * @param int $requestid The request ID.
      * @return array
      * @throws coding_exception
@@ -342,6 +339,7 @@ class external extends external_api {
     /**
      * Parameter description for get_data_request().
      *
+     * @since Moodle 3.5
      * @return external_description
      */
     public static function get_data_request_returns() {
@@ -354,6 +352,7 @@ class external extends external_api {
     /**
      * Parameter description for approve_data_request().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function approve_data_request_parameters() {
@@ -365,6 +364,7 @@ class external extends external_api {
     /**
      * Approve a data request.
      *
+     * @since Moodle 3.5
      * @param int $requestid The request ID.
      * @return array
      * @throws coding_exception
@@ -411,6 +411,7 @@ class external extends external_api {
     /**
      * Parameter description for approve_data_request().
      *
+     * @since Moodle 3.5
      * @return external_description
      */
     public static function approve_data_request_returns() {
@@ -502,6 +503,7 @@ class external extends external_api {
     /**
      * Parameter description for deny_data_request().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function deny_data_request_parameters() {
@@ -513,6 +515,7 @@ class external extends external_api {
     /**
      * Deny a data request.
      *
+     * @since Moodle 3.5
      * @param int $requestid The request ID.
      * @return array
      * @throws coding_exception
@@ -559,6 +562,7 @@ class external extends external_api {
     /**
      * Parameter description for deny_data_request().
      *
+     * @since Moodle 3.5
      * @return external_description
      */
     public static function deny_data_request_returns() {
@@ -650,6 +654,7 @@ class external extends external_api {
     /**
      * Parameter description for get_data_request().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function get_users_parameters() {
@@ -661,6 +666,7 @@ class external extends external_api {
     /**
      * Fetch the details of a user's data request.
      *
+     * @since Moodle 3.5
      * @param string $query The search request.
      * @return array
      * @throws required_capability_exception
@@ -700,6 +706,7 @@ class external extends external_api {
     /**
      * Parameter description for get_users().
      *
+     * @since Moodle 3.5
      * @return external_description
      * @throws coding_exception
      */
@@ -716,6 +723,7 @@ class external extends external_api {
     /**
      * Parameter description for create_purpose_form().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function create_purpose_form_parameters() {
@@ -727,6 +735,7 @@ class external extends external_api {
     /**
      * Creates a data purpose from form data.
      *
+     * @since Moodle 3.5
      * @param string $jsonformdata
      * @return array
      */
@@ -739,9 +748,7 @@ class external extends external_api {
             'jsonformdata' => $jsonformdata
         ]);
 
-        // Validate context and access to manage the registry.
         self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
 
         $serialiseddata = json_decode($params['jsonformdata']);
         $data = array();
@@ -769,6 +776,7 @@ class external extends external_api {
     /**
      * Returns for create_purpose_form().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function create_purpose_form_returns() {
@@ -782,6 +790,7 @@ class external extends external_api {
     /**
      * Parameter description for delete_purpose().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function delete_purpose_parameters() {
@@ -793,6 +802,7 @@ class external extends external_api {
     /**
      * Deletes a data purpose.
      *
+     * @since Moodle 3.5
      * @param int $id The ID.
      * @return array
      * @throws invalid_persistent_exception
@@ -806,10 +816,6 @@ class external extends external_api {
             'id' => $id
         ]);
 
-        // Validate context and access to manage the registry.
-        self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
-
         $result = api::delete_purpose($params['id']);
 
         return [
@@ -821,6 +827,7 @@ class external extends external_api {
     /**
      * Parameter description for delete_purpose().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function delete_purpose_returns() {
@@ -833,6 +840,7 @@ class external extends external_api {
     /**
      * Parameter description for create_category_form().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function create_category_form_parameters() {
@@ -844,6 +852,7 @@ class external extends external_api {
     /**
      * Creates a data category from form data.
      *
+     * @since Moodle 3.5
      * @param string $jsonformdata
      * @return array
      */
@@ -856,9 +865,7 @@ class external extends external_api {
             'jsonformdata' => $jsonformdata
         ]);
 
-        // Validate context and access to manage the registry.
         self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
 
         $serialiseddata = json_decode($params['jsonformdata']);
         $data = array();
@@ -886,6 +893,7 @@ class external extends external_api {
     /**
      * Returns for create_category_form().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function create_category_form_returns() {
@@ -899,6 +907,7 @@ class external extends external_api {
     /**
      * Parameter description for delete_category().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function delete_category_parameters() {
@@ -910,6 +919,7 @@ class external extends external_api {
     /**
      * Deletes a data category.
      *
+     * @since Moodle 3.5
      * @param int $id The ID.
      * @return array
      * @throws invalid_persistent_exception
@@ -923,10 +933,6 @@ class external extends external_api {
             'id' => $id
         ]);
 
-        // Validate context and access to manage the registry.
-        self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
-
         $result = api::delete_category($params['id']);
 
         return [
@@ -938,6 +944,7 @@ class external extends external_api {
     /**
      * Parameter description for delete_category().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function delete_category_returns() {
@@ -950,6 +957,7 @@ class external extends external_api {
     /**
      * Parameter description for set_contextlevel_form().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function set_contextlevel_form_parameters() {
@@ -961,6 +969,7 @@ class external extends external_api {
     /**
      * Creates a data category from form data.
      *
+     * @since Moodle 3.5
      * @param string $jsonformdata
      * @return array
      */
@@ -973,9 +982,8 @@ class external extends external_api {
             'jsonformdata' => $jsonformdata
         ]);
 
-        // Validate context and access to manage the registry.
+        // Extra permission checkings are delegated to api::set_contextlevel.
         self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
 
         $serialiseddata = json_decode($params['jsonformdata']);
         $data = array();
@@ -989,6 +997,7 @@ class external extends external_api {
             $contextlevel = api::set_contextlevel($validateddata);
         } else if ($errors = $mform->is_validated()) {
             $warnings[] = json_encode($errors);
+            throw new moodle_exception('generalerror');
         }
 
         if ($contextlevel) {
@@ -1005,6 +1014,7 @@ class external extends external_api {
     /**
      * Returns for set_contextlevel_form().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function set_contextlevel_form_returns() {
@@ -1017,6 +1027,7 @@ class external extends external_api {
     /**
      * Parameter description for set_context_form().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function set_context_form_parameters() {
@@ -1028,6 +1039,7 @@ class external extends external_api {
     /**
      * Creates a data category from form data.
      *
+     * @since Moodle 3.5
      * @param string $jsonformdata
      * @return array
      */
@@ -1040,9 +1052,8 @@ class external extends external_api {
             'jsonformdata' => $jsonformdata
         ]);
 
-        // Validate context and access to manage the registry.
+        // Extra permission checkings are delegated to api::set_context_instance.
         self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
 
         $serialiseddata = json_decode($params['jsonformdata']);
         $data = array();
@@ -1052,7 +1063,6 @@ class external extends external_api {
         $customdata = \tool_dataprivacy\form\context_instance::get_context_instance_customdata($context);
         $mform = new \tool_dataprivacy\form\context_instance(null, $customdata, 'post', '', null, true, $data);
         if ($validateddata = $mform->get_data()) {
-            api::check_can_manage_data_registry($validateddata->contextid);
             $context = api::set_context_instance($validateddata);
         } else if ($errors = $mform->is_validated()) {
             $warnings[] = json_encode($errors);
@@ -1073,6 +1083,7 @@ class external extends external_api {
     /**
      * Returns for set_context_form().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function set_context_form_returns() {
@@ -1085,6 +1096,7 @@ class external extends external_api {
     /**
      * Parameter description for tree_extra_branches().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function tree_extra_branches_parameters() {
@@ -1097,6 +1109,7 @@ class external extends external_api {
     /**
      * Returns tree extra branches.
      *
+     * @since Moodle 3.5
      * @param int $contextid
      * @param string $element
      * @return array
@@ -1136,6 +1149,7 @@ class external extends external_api {
     /**
      * Returns for tree_extra_branches().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function tree_extra_branches_returns() {
@@ -1148,6 +1162,7 @@ class external extends external_api {
     /**
      * Parameters for confirm_contexts_for_deletion().
      *
+     * @since Moodle 3.5
      * @return external_function_parameters
      */
     public static function confirm_contexts_for_deletion_parameters() {
@@ -1162,6 +1177,7 @@ class external extends external_api {
     /**
      * Confirm a given array of expired context record IDs
      *
+     * @since Moodle 3.5
      * @param int[] $ids Array of record IDs from the expired contexts table.
      * @return array
      * @throws coding_exception
@@ -1176,9 +1192,9 @@ class external extends external_api {
         ]);
         $ids = $params['ids'];
 
-        // Validate context and access to manage the registry.
-        self::validate_context(\context_system::instance());
-        api::check_can_manage_data_registry();
+        // Validate context.
+        $context = context_system::instance();
+        self::validate_context($context);
 
         $result = true;
         if (!empty($ids)) {
@@ -1188,27 +1204,24 @@ class external extends external_api {
                 $expiredcontext = new expired_context($id);
                 $targetcontext = context_helper::instance_by_id($expiredcontext->get('contextid'));
 
-                if (!$targetcontext instanceof \context_user) {
-                    // Fetch this context's child contexts. Make sure that all of the child contexts are flagged for deletion.
-                    // User context children do not need to be considered.
-                    $childcontexts = $targetcontext->get_child_contexts();
-                    foreach ($childcontexts as $child) {
-                        if ($expiredchildcontext = expired_context::get_record(['contextid' => $child->id])) {
-                            // Add this child context to the list for approval.
-                            $expiredcontextstoapprove[] = $expiredchildcontext;
-                        } else {
-                            // This context has not yet been flagged for deletion.
-                            $result = false;
-                            $message = get_string('errorcontexthasunexpiredchildren', 'tool_dataprivacy',
-                                $targetcontext->get_context_name(false));
-                            $warnings[] = [
-                                'item' => 'tool_dataprivacy_ctxexpired',
-                                'warningcode' => 'errorcontexthasunexpiredchildren',
-                                'message' => $message
-                            ];
-                            // Exit the process.
-                            break 2;
-                        }
+                // Fetch this context's child contexts. Make sure that all of the child contexts are flagged for deletion.
+                $childcontexts = $targetcontext->get_child_contexts();
+                foreach ($childcontexts as $child) {
+                    if ($expiredchildcontext = expired_context::get_record(['contextid' => $child->id])) {
+                        // Add this child context to the list for approval.
+                        $expiredcontextstoapprove[] = $expiredchildcontext;
+                    } else {
+                        // This context has not yet been flagged for deletion.
+                        $result = false;
+                        $message = get_string('errorcontexthasunexpiredchildren', 'tool_dataprivacy',
+                            $targetcontext->get_context_name(false));
+                        $warnings[] = [
+                            'item' => 'tool_dataprivacy_ctxexpired',
+                            'warningcode' => 'errorcontexthasunexpiredchildren',
+                            'message' => $message
+                        ];
+                        // Exit the process.
+                        break 2;
                     }
                 }
 
@@ -1245,6 +1258,7 @@ class external extends external_api {
     /**
      * Returns for confirm_contexts_for_deletion().
      *
+     * @since Moodle 3.5
      * @return external_single_structure
      */
     public static function confirm_contexts_for_deletion_returns() {
@@ -1299,7 +1313,6 @@ class external extends external_api {
         // Validate context.
         $context = context_system::instance();
         self::validate_context($context);
-        api::check_can_manage_data_registry();
 
         // Set the context defaults.
         $result = api::set_context_defaults($contextlevel, $category, $purpose, $activity, $override);
@@ -1353,7 +1366,6 @@ class external extends external_api {
 
         $context = context_system::instance();
         self::validate_context($context);
-        api::check_can_manage_data_registry();
 
         $categories = api::get_categories();
         $options = data_registry_page::category_options($categories, $includenotset, $includeinherit);
@@ -1540,6 +1552,7 @@ class external extends external_api {
     /**
      * Gets the structure of a tree node (link + child branches).
      *
+     * @since Moodle 3.5
      * @param bool $allowchildbranches
      * @return array
      */

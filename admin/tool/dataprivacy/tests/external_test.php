@@ -40,85 +40,71 @@ use tool_dataprivacy\external;
  */
 class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
 
+    /** @var stdClass The user making the request. */
+    protected $requester;
+
+    /** @var int The data request ID. */
+    protected $requestid;
+
     /**
-     * Test for external::approve_data_request() with the user not logged in.
+     * Setup function- we will create a course and add an assign instance to it.
      */
-    public function test_approve_data_request_not_logged_in() {
+    protected function setUp() {
         $this->resetAfterTest();
 
         $generator = new testing_data_generator();
         $requester = $generator->create_user();
+
         $comment = 'sample comment';
 
+        // Login as user.
+        $this->setUser($requester->id);
+
         // Test data request creation.
-        $this->setUser($requester);
         $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
+        $this->requestid = $datarequest->get('id');
+        $this->requester = $requester;
 
         // Log out the user and set force login to true.
         $this->setUser();
+    }
 
+    /**
+     * Test for external::approve_data_request() with the user not logged in.
+     */
+    public function test_approve_data_request_not_logged_in() {
         $this->expectException(require_login_exception::class);
-        external::approve_data_request($datarequest->get('id'));
+        external::approve_data_request($this->requestid);
     }
 
     /**
      * Test for external::approve_data_request() with the user not having a DPO role.
      */
     public function test_approve_data_request_not_dpo() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Login as the requester.
-        $this->setUser($requester);
+        $this->setUser($this->requester->id);
         $this->expectException(required_capability_exception::class);
-        external::approve_data_request($datarequest->get('id'));
+        external::approve_data_request($this->requestid);
     }
 
     /**
      * Test for external::approve_data_request() for request that's not ready for approval
      */
     public function test_approve_data_request_not_waiting_for_approval() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
         $this->expectException(moodle_exception::class);
-        external::approve_data_request($datarequest->get('id'));
+        external::approve_data_request($this->requestid);
     }
 
     /**
      * Test for external::approve_data_request()
      */
     public function test_approve_data_request() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
-        api::update_request_status($datarequest->get('id'), api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-        $result = external::approve_data_request($datarequest->get('id'));
+        api::update_request_status($this->requestid, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        $result = external::approve_data_request($this->requestid);
         $return = (object) external_api::clean_returnvalue(external::approve_data_request_returns(), $result);
         $this->assertTrue($return->result);
         $this->assertEmpty($return->warnings);
@@ -128,13 +114,10 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::approve_data_request() for a non-existent request ID.
      */
     public function test_approve_data_request_non_existent() {
-        $this->resetAfterTest();
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
-
-        $result = external::approve_data_request(1);
-
+        api::update_request_status($this->requestid, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        $result = external::approve_data_request($this->requestid + 1);
         $return = (object) external_api::clean_returnvalue(external::approve_data_request_returns(), $result);
         $this->assertFalse($return->result);
         $this->assertCount(1, $return->warnings);
@@ -146,21 +129,13 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::cancel_data_request() of another user.
      */
     public function test_cancel_data_request_other_user() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
+        $generator = $this->getDataGenerator();
         $otheruser = $generator->create_user();
-        $comment = 'sample comment';
 
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        // Login as other user.
+        // Login as another user.
         $this->setUser($otheruser);
 
-        $result = external::cancel_data_request($datarequest->get('id'));
+        $result = external::cancel_data_request($this->requestid);
         $return = (object) external_api::clean_returnvalue(external::approve_data_request_returns(), $result);
         $this->assertFalse($return->result);
         $this->assertCount(1, $return->warnings);
@@ -169,106 +144,13 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
     }
 
     /**
-     * Test cancellation of a request where you are the requester of another user's data.
-     */
-    public function test_cancel_data_request_other_user_as_requester() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $otheruser = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Assign requester as otheruser'sparent.
-        $systemcontext = \context_system::instance();
-        $parentrole = $generator->create_role();
-        assign_capability('tool/dataprivacy:makedatarequestsforchildren', CAP_ALLOW, $parentrole, $systemcontext);
-        role_assign($parentrole, $requester->id, \context_user::instance($otheruser->id));
-
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($otheruser->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        $result = external::cancel_data_request($datarequest->get('id'));
-        $return = (object) external_api::clean_returnvalue(external::approve_data_request_returns(), $result);
-        $this->assertTrue($return->result);
-        $this->assertEmpty($return->warnings);
-    }
-
-    /**
-     * Test cancellation of a request where you are the requester of another user's data.
-     */
-    public function test_cancel_data_request_requester_lost_permissions() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $otheruser = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Assign requester as otheruser'sparent.
-        $systemcontext = \context_system::instance();
-        $parentrole = $generator->create_role();
-        assign_capability('tool/dataprivacy:makedatarequestsforchildren', CAP_ALLOW, $parentrole, $systemcontext);
-        role_assign($parentrole, $requester->id, \context_user::instance($otheruser->id));
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($otheruser->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        // Unassign the role.
-        role_unassign($parentrole, $requester->id, \context_user::instance($otheruser->id)->id);
-
-        // This user can no longer make the request.
-        $this->expectException(required_capability_exception::class);
-
-        $result = external::cancel_data_request($datarequest->get('id'));
-    }
-
-    /**
-     * Test cancellation of a request where you are the requester of another user's data.
-     */
-    public function test_cancel_data_request_other_user_as_child() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $otheruser = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Assign requester as otheruser'sparent.
-        $systemcontext = \context_system::instance();
-        $parentrole = $generator->create_role();
-        assign_capability('tool/dataprivacy:makedatarequestsforchildren', CAP_ALLOW, $parentrole, $systemcontext);
-        role_assign($parentrole, $requester->id, \context_user::instance($otheruser->id));
-
-        // Test data request creation.
-        $this->setUser($otheruser);
-        $datarequest = api::create_data_request($otheruser->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        $result = external::cancel_data_request($datarequest->get('id'));
-        $return = (object) external_api::clean_returnvalue(external::approve_data_request_returns(), $result);
-        $this->assertTrue($return->result);
-        $this->assertEmpty($return->warnings);
-    }
-
-    /**
      * Test for external::cancel_data_request()
      */
     public function test_cancel_data_request() {
-        $this->resetAfterTest();
+        // Login as the requester.
+        $this->setUser($this->requester);
 
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        // Test cancellation.
-        $this->setUser($requester);
-        $result = external::cancel_data_request($datarequest->get('id'));
-
+        $result = external::cancel_data_request($this->requestid);
         $return = (object) external_api::clean_returnvalue(external::approve_data_request_returns(), $result);
         $this->assertTrue($return->result);
         $this->assertEmpty($return->warnings);
@@ -278,12 +160,10 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test contact DPO.
      */
     public function test_contact_dpo() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
+        $generator = $this->getDataGenerator();
         $user = $generator->create_user();
-
         $this->setUser($user);
+
         $message = 'Hello world!';
         $result = external::contact_dpo($message);
         $return = (object) external_api::clean_returnvalue(external::contact_dpo_returns(), $result);
@@ -295,12 +175,10 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test contact DPO with message containing invalid input.
      */
     public function test_contact_dpo_with_nasty_input() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
+        $generator = $this->getDataGenerator();
         $user = $generator->create_user();
-
         $this->setUser($user);
+
         $this->expectException('invalid_parameter_exception');
         external::contact_dpo('de<>\\..scription');
     }
@@ -309,77 +187,38 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::deny_data_request() with the user not logged in.
      */
     public function test_deny_data_request_not_logged_in() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        // Test data request creation.
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        // Log out.
-        $this->setUser();
         $this->expectException(require_login_exception::class);
-        external::deny_data_request($datarequest->get('id'));
+        external::deny_data_request($this->requestid);
     }
 
     /**
      * Test for external::deny_data_request() with the user not having a DPO role.
      */
     public function test_deny_data_request_not_dpo() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Login as the requester.
-        $this->setUser($requester);
+        $this->setUser($this->requester->id);
         $this->expectException(required_capability_exception::class);
-        external::deny_data_request($datarequest->get('id'));
+        external::deny_data_request($this->requestid);
     }
 
     /**
      * Test for external::deny_data_request() for request that's not ready for approval
      */
     public function test_deny_data_request_not_waiting_for_approval() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
         $this->expectException(moodle_exception::class);
-        external::deny_data_request($datarequest->get('id'));
+        external::deny_data_request($this->requestid);
     }
 
     /**
      * Test for external::deny_data_request()
      */
     public function test_deny_data_request() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
-        api::update_request_status($datarequest->get('id'), api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-        $result = external::approve_data_request($datarequest->get('id'));
+        api::update_request_status($this->requestid, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        $result = external::approve_data_request($this->requestid);
         $return = (object) external_api::clean_returnvalue(external::deny_data_request_returns(), $result);
         $this->assertTrue($return->result);
         $this->assertEmpty($return->warnings);
@@ -389,12 +228,10 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::deny_data_request() for a non-existent request ID.
      */
     public function test_deny_data_request_non_existent() {
-        $this->resetAfterTest();
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
-        $result = external::deny_data_request(1);
-
+        api::update_request_status($this->requestid, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        $result = external::deny_data_request($this->requestid + 1);
         $return = (object) external_api::clean_returnvalue(external::deny_data_request_returns(), $result);
         $this->assertFalse($return->result);
         $this->assertCount(1, $return->warnings);
@@ -406,62 +243,34 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::get_data_request() with the user not logged in.
      */
     public function test_get_data_request_not_logged_in() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        $this->setUser();
         $this->expectException(require_login_exception::class);
-        external::get_data_request($datarequest->get('id'));
+        external::get_data_request($this->requestid);
     }
 
     /**
      * Test for external::get_data_request() with the user not having a DPO role.
      */
     public function test_get_data_request_not_dpo() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
+        $generator = $this->getDataGenerator();
         $otheruser = $generator->create_user();
-        $comment = 'sample comment';
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
-        // Login as the otheruser.
+        // Login as the requester.
         $this->setUser($otheruser);
         $this->expectException(required_capability_exception::class);
-        external::get_data_request($datarequest->get('id'));
+        external::get_data_request($this->requestid);
     }
 
     /**
      * Test for external::get_data_request()
      */
     public function test_get_data_request() {
-        $this->resetAfterTest();
-
-        $generator = new testing_data_generator();
-        $requester = $generator->create_user();
-        $comment = 'sample comment';
-
-        $this->setUser($requester);
-        $datarequest = api::create_data_request($requester->id, api::DATAREQUEST_TYPE_EXPORT, $comment);
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
-        $result = external::get_data_request($datarequest->get('id'));
-
+        $result = external::get_data_request($this->requestid);
         $return = (object) external_api::clean_returnvalue(external::get_data_request_returns(), $result);
         $this->assertEquals(api::DATAREQUEST_TYPE_EXPORT, $return->result['type']);
         $this->assertEquals('sample comment', $return->result['comments']);
-        $this->assertEquals($requester->id, $return->result['userid']);
-        $this->assertEquals($requester->id, $return->result['requestedby']);
+        $this->assertEquals($this->requester->id, $return->result['userid']);
+        $this->assertEquals($this->requester->id, $return->result['requestedby']);
         $this->assertEmpty($return->warnings);
     }
 
@@ -469,12 +278,10 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::get_data_request() for a non-existent request ID.
      */
     public function test_get_data_request_non_existent() {
-        $this->resetAfterTest();
-
         // Admin as DPO. (The default when no one's assigned as a DPO in the site).
         $this->setAdminUser();
         $this->expectException(dml_missing_record_exception::class);
-        external::get_data_request(1);
+        external::get_data_request($this->requestid + 1);
     }
 
     /**
@@ -482,8 +289,6 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * when called by a user that doesn't have the manage registry capability.
      */
     public function test_set_context_defaults_no_capability() {
-        $this->resetAfterTest();
-
         $generator = $this->getDataGenerator();
         $user = $generator->create_user();
         $this->setUser($user);
@@ -502,8 +307,6 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * @param bool $override Whether to override instances.
      */
     public function test_set_context_defaults($modulelevel, $override) {
-        $this->resetAfterTest();
-
         $this->setAdminUser();
         $generator = $this->getDataGenerator();
 
@@ -561,11 +364,9 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * when called by a user that doesn't have the manage registry capability.
      */
     public function test_get_category_options_no_capability() {
-        $this->resetAfterTest();
-
-        $user = $this->getDataGenerator()->create_user();
+        $generator = $this->getDataGenerator();
+        $user = $generator->create_user();
         $this->setUser($user);
-
         $this->expectException(required_capability_exception::class);
         external::get_category_options(true, true);
     }
@@ -590,7 +391,6 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * @param bool $includenotset Whether "Not set" would be included to the options.
      */
     public function test_get_category_options($includeinherit, $includenotset) {
-        $this->resetAfterTest();
         $this->setAdminUser();
 
         // Prepare our expected options.
@@ -636,7 +436,6 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * when called by a user that doesn't have the manage registry capability.
      */
     public function test_get_purpose_options_no_capability() {
-        $this->resetAfterTest();
         $generator = $this->getDataGenerator();
         $user = $generator->create_user();
         $this->setUser($user);
@@ -652,7 +451,6 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * @param bool $includenotset Whether "Not set" would be included to the options.
      */
     public function test_get_purpose_options($includeinherit, $includenotset) {
-        $this->resetAfterTest();
         $this->setAdminUser();
 
         // Prepare our expected options.
@@ -720,7 +518,6 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * @param bool $nodefaults Whether to fetch only activities that don't have defaults.
      */
     public function test_get_activity_options($inheritcategory, $inheritpurpose, $nodefaults) {
-        $this->resetAfterTest();
         $this->setAdminUser();
 
         $category = api::create_category((object)['name' => 'Test category']);
@@ -768,25 +565,21 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::bulk_approve_data_requests().
      */
     public function test_bulk_approve_data_requests() {
-        $this->resetAfterTest();
-
-        // Create delete data requests.
-        $requester1 = $this->getDataGenerator()->create_user();
+        $generator = new testing_data_generator();
+        $requester1 = $generator->create_user();
+        $comment1 = 'sample comment';
+        // Login as requester2.
         $this->setUser($requester1->id);
-        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
+        // Create delete data request.
+        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, $comment1);
+
         $requestid1 = $datarequest1->get('id');
+        $requestid2 = $this->requestid;
 
-        $requester2 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester2->id);
-        $datarequest2 = api::create_data_request($requester2->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid2 = $datarequest2->get('id');
-
-        // Approve the requests.
         $this->setAdminUser();
         api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
         api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
         $result = external::bulk_approve_data_requests([$requestid1, $requestid2]);
-
         $return = (object) external_api::clean_returnvalue(external::bulk_approve_data_requests_returns(), $result);
         $this->assertTrue($return->result);
         $this->assertEmpty($return->warnings);
@@ -796,100 +589,48 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::bulk_approve_data_requests() for a non-existent request ID.
      */
     public function test_bulk_approve_data_requests_non_existent() {
-        $this->resetAfterTest();
+        $generator = new testing_data_generator();
+        $requester1 = $generator->create_user();
+        $comment1 = 'sample comment';
+        // Login as requester2.
+        $this->setUser($requester1->id);
+        // Create delete data request.
+        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, $comment1);
+
+        $requestid1 = $datarequest1->get('id');
+        $requestid2 = $this->requestid;
 
         $this->setAdminUser();
-
-        $result = external::bulk_approve_data_requests([42]);
-
+        api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        $result = external::bulk_approve_data_requests([$requestid1 + 1, $requestid2]);
         $return = (object) external_api::clean_returnvalue(external::bulk_approve_data_requests_returns(), $result);
         $this->assertFalse($return->result);
         $this->assertCount(1, $return->warnings);
         $warning = reset($return->warnings);
         $this->assertEquals('errorrequestnotfound', $warning['warningcode']);
-        $this->assertEquals(42, $warning['item']);
-    }
-
-    /**
-     * Test for external::bulk_deny_data_requests() for a user without permission to deny requests.
-     */
-    public function test_bulk_approve_data_requests_no_permission() {
-        $this->resetAfterTest();
-
-        // Create delete data requests.
-        $requester1 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester1->id);
-        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid1 = $datarequest1->get('id');
-
-        $requester2 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester2->id);
-        $datarequest2 = api::create_data_request($requester2->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid2 = $datarequest2->get('id');
-
-        $this->setAdminUser();
-        api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-        api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-
-        // Approve the requests.
-        $uut = $this->getDataGenerator()->create_user();
-        $this->setUser($uut);
-
-        $this->expectException(required_capability_exception::class);
-        $result = external::bulk_approve_data_requests([$requestid1, $requestid2]);
-    }
-
-    /**
-     * Test for external::bulk_deny_data_requests() for a user without permission to deny requests.
-     */
-    public function test_bulk_approve_data_requests_own_request() {
-        $this->resetAfterTest();
-
-        // Create delete data requests.
-        $requester1 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester1->id);
-        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid1 = $datarequest1->get('id');
-
-        $requester2 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester2->id);
-        $datarequest2 = api::create_data_request($requester2->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid2 = $datarequest2->get('id');
-
-        $this->setAdminUser();
-        api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-        api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-
-        // Deny the requests.
-        $this->setUser($requester1);
-
-        $this->expectException(required_capability_exception::class);
-        $result = external::bulk_approve_data_requests([$requestid1]);
+        $this->assertEquals($requestid1 + 1, $warning['item']);
     }
 
     /**
      * Test for external::bulk_deny_data_requests().
      */
     public function test_bulk_deny_data_requests() {
-        $this->resetAfterTest();
-
-        // Create delete data requests.
-        $requester1 = $this->getDataGenerator()->create_user();
+        $generator = new testing_data_generator();
+        $requester1 = $generator->create_user();
+        $comment1 = 'sample comment';
+        // Login as requester2.
         $this->setUser($requester1->id);
-        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
+        // Create delete data request.
+        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, $comment1);
+
         $requestid1 = $datarequest1->get('id');
+        $requestid2 = $this->requestid;
 
-        $requester2 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester2->id);
-        $datarequest2 = api::create_data_request($requester2->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid2 = $datarequest2->get('id');
-
-        // Deny the requests.
         $this->setAdminUser();
         api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
         api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
         $result = external::bulk_deny_data_requests([$requestid1, $requestid2]);
-
         $return = (object) external_api::clean_returnvalue(external::bulk_approve_data_requests_returns(), $result);
         $this->assertTrue($return->result);
         $this->assertEmpty($return->warnings);
@@ -899,73 +640,26 @@ class tool_dataprivacy_external_testcase extends externallib_advanced_testcase {
      * Test for external::bulk_deny_data_requests() for a non-existent request ID.
      */
     public function test_bulk_deny_data_requests_non_existent() {
-        $this->resetAfterTest();
+        $generator = new testing_data_generator();
+        $requester1 = $generator->create_user();
+        $comment1 = 'sample comment';
+        // Login as requester2.
+        $this->setUser($requester1->id);
+        // Create delete data request.
+        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, $comment1);
+
+        $requestid1 = $datarequest1->get('id');
+        $requestid2 = $this->requestid;
 
         $this->setAdminUser();
-        $result = external::bulk_deny_data_requests([42]);
+        api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
+        $result = external::bulk_deny_data_requests([$requestid1 + 1, $requestid2]);
         $return = (object) external_api::clean_returnvalue(external::bulk_approve_data_requests_returns(), $result);
-
         $this->assertFalse($return->result);
         $this->assertCount(1, $return->warnings);
         $warning = reset($return->warnings);
         $this->assertEquals('errorrequestnotfound', $warning['warningcode']);
-        $this->assertEquals(42, $warning['item']);
-    }
-
-    /**
-     * Test for external::bulk_deny_data_requests() for a user without permission to deny requests.
-     */
-    public function test_bulk_deny_data_requests_no_permission() {
-        $this->resetAfterTest();
-
-        // Create delete data requests.
-        $requester1 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester1->id);
-        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid1 = $datarequest1->get('id');
-
-        $requester2 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester2->id);
-        $datarequest2 = api::create_data_request($requester2->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid2 = $datarequest2->get('id');
-
-        $this->setAdminUser();
-        api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-        api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-
-        // Deny the requests.
-        $uut = $this->getDataGenerator()->create_user();
-        $this->setUser($uut);
-
-        $this->expectException(required_capability_exception::class);
-        $result = external::bulk_deny_data_requests([$requestid1, $requestid2]);
-    }
-
-    /**
-     * Test for external::bulk_deny_data_requests() for a user cannot approve their own request.
-     */
-    public function test_bulk_deny_data_requests_own_request() {
-        $this->resetAfterTest();
-
-        // Create delete data requests.
-        $requester1 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester1->id);
-        $datarequest1 = api::create_data_request($requester1->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid1 = $datarequest1->get('id');
-
-        $requester2 = $this->getDataGenerator()->create_user();
-        $this->setUser($requester2->id);
-        $datarequest2 = api::create_data_request($requester2->id, api::DATAREQUEST_TYPE_DELETE, 'Example comment');
-        $requestid2 = $datarequest2->get('id');
-
-        $this->setAdminUser();
-        api::update_request_status($requestid1, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-        api::update_request_status($requestid2, api::DATAREQUEST_STATUS_AWAITING_APPROVAL);
-
-        // Deny the requests.
-        $this->setUser($requester1);
-
-        $this->expectException(required_capability_exception::class);
-        $result = external::bulk_deny_data_requests([$requestid1]);
+        $this->assertEquals($requestid1 + 1, $warning['item']);
     }
 }

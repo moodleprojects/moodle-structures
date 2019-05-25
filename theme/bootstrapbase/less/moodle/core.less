@@ -118,6 +118,8 @@ a.dimmed_text:visited,
 }
 .unlist,
 .unlist li,
+.list-unstyled,
+.list-unstyled li,
 .inline-list,
 .inline-list li,
 .block .list,
@@ -374,8 +376,10 @@ form.popupform div {
 .pagelayout-report .no-overflow {
     overflow: visible;
 }
+// Minimum height required for a menu in a table inside a scrollable div.
 .no-overflow > .generaltable {
     margin-bottom: 0;
+    min-height: 10em;
 }
 // Accessibility features
 
@@ -2242,11 +2246,6 @@ body.lockscroll {
     margin: 0 auto;
 }
 
-progress {
-    display: block;
-    width: 100%;
-}
-
 /* IE10 only fix for calendar titling */
 .ie10 .yui3-calendar-header-label {
     display: inline-block;
@@ -2417,9 +2416,9 @@ h3.sectionname .inplaceeditable.inplaceeditingon .editinstructions {
         transform: translate(-50%, -50%);
 
         .icon {
-            height: 40px;
-            width: 40px;
-
+            height: 30px;
+            width: 30px;
+            font-size: 30px;
         }
     }
 }
